@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "active_work_id": "sultan-clip-rebrand-d1a6ab67",
+  "works": {
+    "sultan-clip-rebrand-d1a6ab67": {
+      "work_id": "sultan-clip-rebrand-d1a6ab67",
+      "active_plan": "/Users/naufal/Documents/Sultan Tech/ST Clippers/.omo/plans/sultan-clip-rebrand.md",
+      "plan_name": "sultan-clip-rebrand",
+      "status": "completed",
+      "started_at": "2026-07-20T06:02:01.253Z",
+      "updated_at": "2026-07-20T07:33:23.924Z",
+      "session_ids": [
+        "opencode:ses_082be4350ffebudHX8eyFk6hGF"
+      ],
+      "session_origins": {
+        "opencode:ses_082be4350ffebudHX8eyFk6hGF": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {},
+      "ended_at": "2026-07-20T07:33:23.924Z",
+      "elapsed_ms": 5482671
+    }
+  },
+  "active_plan": "/Users/naufal/Documents/Sultan Tech/ST Clippers/.omo/plans/sultan-clip-rebrand.md",
+  "started_at": "2026-07-20T06:02:01.253Z",
+  "status": "completed",
+  "updated_at": "2026-07-20T07:33:23.924Z",
+  "session_ids": [
+    "opencode:ses_082be4350ffebudHX8eyFk6hGF"
+  ],
+  "session_origins": {
+    "opencode:ses_082be4350ffebudHX8eyFk6hGF": "direct"
+  },
+  "plan_name": "sultan-clip-rebrand",
+  "task_sessions": {},
+  "agent": "atlas",
+  "ended_at": "2026-07-20T07:33:23.924Z",
+  "elapsed_ms": 5482671
+}
