@@ -283,68 +283,84 @@ export default function HomePage() {
   }, [handleDeleteAllConfirmed]);
 
   return (
-    <main className="shell">
+    <main className="shell py-28">
       <Topbar onRefresh={loadJobs} />
 
       <section className="workspace">
-        <ControlPanel
-          cropMode={cropMode}
-          error={error}
-          isBusy={isBusy}
-          isSubmitting={isSubmitting}
-          sourceMode={sourceMode}
-          uploadFileName={uploadFileName}
-          uploadPreviewUrl={uploadPreviewUrl}
-          isUploading={isUploading}
-          camCorner={camCorner}
-          onCamCornerChange={setCamCorner}
-          onSourceModeChange={handleSourceModeChange}
-          onUploadFileChange={handleUploadFileChange}
-          maxDuration={maxDuration}
-          minDuration={minDuration}
-          targetClips={targetClips}
-          maxClips={maxClips}
-          videoDuration={videoDuration}
-          onTargetClipsChange={setTargetClips}
-          burnSubtitles={burnSubtitles}
-          captionFontSize={captionFontSize}
-          captionPosition={captionPosition}
-          captionColor={captionColor}
-          captionFont={captionFont}
-          captionOutline={captionOutline}
-          captionOutlineColor={captionOutlineColor}
-          onCaptionFontChange={setCaptionFont}
-          onCaptionOutlineChange={setCaptionOutline}
-          onCaptionOutlineColorChange={setCaptionOutlineColor}
-          aiEnabled={aiEnabled}
-          aiBaseUrl={aiBaseUrl}
-          aiModel={aiModel}
-          aiApiKey={aiApiKey}
-          aiModels={aiModels}
-          isLoadingModels={isLoadingModels}
-          onLoadModels={handleLoadModels}
-          requiredHashtags={requiredHashtags}
-          onRequiredHashtagsChange={setRequiredHashtags}
-          onCropModeChange={setCropMode}
-          onMaxDurationChange={setMaxDuration}
-          onMinDurationChange={setMinDuration}
-          onBurnSubtitlesChange={setBurnSubtitles}
-          onCaptionFontSizeChange={setCaptionFontSize}
-          onCaptionPositionChange={setCaptionPosition}
-          onCaptionColorChange={setCaptionColor}
-          onAiEnabledChange={setAiEnabled}
-          onAiBaseUrlChange={setAiBaseUrl}
-          onAiModelChange={setAiModel}
-          onAiApiKeyChange={setAiApiKey}
-          onStartJob={handleStartJob}
-          onUrlChange={setUrl}
-          url={url}
-        />
-        <StatusPanel job={job} latestLogs={latestLogs} />
+        <div className="doppelrand">
+          <div className="doppelrand-inner">
+            <ControlPanel
+              cropMode={cropMode}
+              error={error}
+              isBusy={isBusy}
+              isSubmitting={isSubmitting}
+              sourceMode={sourceMode}
+              uploadFileName={uploadFileName}
+              uploadPreviewUrl={uploadPreviewUrl}
+              isUploading={isUploading}
+              camCorner={camCorner}
+              onCamCornerChange={setCamCorner}
+              onSourceModeChange={handleSourceModeChange}
+              onUploadFileChange={handleUploadFileChange}
+              maxDuration={maxDuration}
+              minDuration={minDuration}
+              targetClips={targetClips}
+              maxClips={maxClips}
+              videoDuration={videoDuration}
+              onTargetClipsChange={setTargetClips}
+              burnSubtitles={burnSubtitles}
+              captionFontSize={captionFontSize}
+              captionPosition={captionPosition}
+              captionColor={captionColor}
+              captionFont={captionFont}
+              captionOutline={captionOutline}
+              captionOutlineColor={captionOutlineColor}
+              onCaptionFontChange={setCaptionFont}
+              onCaptionOutlineChange={setCaptionOutline}
+              onCaptionOutlineColorChange={setCaptionOutlineColor}
+              aiEnabled={aiEnabled}
+              aiBaseUrl={aiBaseUrl}
+              aiModel={aiModel}
+              aiApiKey={aiApiKey}
+              aiModels={aiModels}
+              isLoadingModels={isLoadingModels}
+              onLoadModels={handleLoadModels}
+              requiredHashtags={requiredHashtags}
+              onRequiredHashtagsChange={setRequiredHashtags}
+              onCropModeChange={setCropMode}
+              onMaxDurationChange={setMaxDuration}
+              onMinDurationChange={setMinDuration}
+              onBurnSubtitlesChange={setBurnSubtitles}
+              onCaptionFontSizeChange={setCaptionFontSize}
+              onCaptionPositionChange={setCaptionPosition}
+              onCaptionColorChange={setCaptionColor}
+              onAiEnabledChange={setAiEnabled}
+              onAiBaseUrlChange={setAiBaseUrl}
+              onAiModelChange={setAiModel}
+              onAiApiKeyChange={setAiApiKey}
+              onStartJob={handleStartJob}
+              onUrlChange={setUrl}
+              url={url}
+            />
+          </div>
+        </div>
+        <div className="doppelrand">
+          <div className="doppelrand-inner">
+            <StatusPanel job={job} latestLogs={latestLogs} />
+          </div>
+        </div>
       </section>
 
-      <ResultsSection clips={job?.clips ?? []} />
-      <HistorySection jobs={jobs} onDeleteAll={handleDeleteAll} onSelectJob={setJob} />
+      <div className="doppelrand results">
+        <div className="doppelrand-inner">
+          <ResultsSection clips={job?.clips ?? []} />
+        </div>
+      </div>
+      <div className="doppelrand history">
+        <div className="doppelrand-inner">
+          <HistorySection jobs={jobs} onDeleteAll={handleDeleteAll} onSelectJob={setJob} />
+        </div>
+      </div>
       <SiteFooter />
     </main>
   );

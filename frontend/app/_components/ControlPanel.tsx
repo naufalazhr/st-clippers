@@ -483,9 +483,20 @@ export function ControlPanel({
 
       {error ? <p className="error">{error}</p> : null}
 
-      <button className="primary" type="button" disabled={isStartDisabled} onClick={onStartJob}>
-        {isProcessing ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
-        {isProcessing ? "Sedang Memproses..." : "Mulai Potong Video"}
+      <button className="btnPrimary" type="button" disabled={isStartDisabled} onClick={onStartJob}>
+        {isProcessing ? (
+          <>
+            <Loader2 className="spin" size={18} />
+            Sedang Memproses...
+          </>
+        ) : (
+          <>
+            Mulai Potong Video
+            <span className="btnPrimary-inner-icon">
+              <Play size={14} />
+            </span>
+          </>
+        )}
       </button>
     </section>
   );
