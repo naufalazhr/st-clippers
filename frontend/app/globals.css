@@ -198,13 +198,16 @@ a {
   margin: 0 0 24px;
 }
 
-/* ── Workspace (Bento-style 2-col) ── */
+/* ── Workspace (Bento: main control + compact status) ── */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(400px, 1fr) minmax(420px, 1fr);
+  grid-template-columns: minmax(500px, 1fr) 360px;
   gap: 24px;
   align-items: start;
 }
+
+.workspace-main { grid-column: 1; }
+.workspace-side { grid-column: 2; }
 
 /* ── Form fields (doppelrand style) ── */
 .field {
@@ -882,7 +885,12 @@ a {
     margin-bottom: 32px;
     top: 16px;
   }
-  .workspace { grid-template-columns: 1fr; }
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .workspace-main, .workspace-side {
+    grid-column: 1;
+  }
   .gridFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .doppelrand-inner { padding: 28px; }
 }

@@ -287,7 +287,7 @@ export default function HomePage() {
       <Topbar onRefresh={loadJobs} />
 
       <section className="workspace">
-        <div className="doppelrand">
+        <div className="doppelrand workspace-main">
           <div className="doppelrand-inner">
             <ControlPanel
               cropMode={cropMode}
@@ -344,7 +344,7 @@ export default function HomePage() {
             />
           </div>
         </div>
-        <div className="doppelrand">
+        <div className="doppelrand workspace-side">
           <div className="doppelrand-inner">
             <StatusPanel job={job} latestLogs={latestLogs} />
           </div>
