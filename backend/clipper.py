@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -15,11 +16,19 @@ from rich.console import Console
 from rich.table import Table
 from slugify import slugify
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 from llm import AIConfig, chat_completion, extract_json
 
 
 console = Console()
+
+
+def frozen_base() -> Path:
+    """Return the base directory for bundled assets. Uses sys._MEIPASS when frozen by PyInstaller, else the script directory."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent
 
 
 @dataclass
@@ -77,7 +86,7 @@ WEAK_STARTS = {
 }
 
 CropMode = Literal["center", "person", "streamer"]
-YUNET_MODEL_PATH = Path(__file__).resolve().parent / "models" / "face_detection_yunet_2023mar.onnx"
+YUNET_MODEL_PATH = frozen_base() / "models" / "face_detection_yunet_2023mar.onnx"
 
 TRANSCRIPT_REPLACEMENTS = {
     r"\binkam\b": "income",
@@ -152,8 +161,10 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
 
     hog = cv2.HOGDescriptor()
     hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
-    face_cascade = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"))
-    profile_cascade = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades) / "haarcascade_profileface.xml"))
+    _frozen_haar = frozen_base() / "cv2" / "data" / "haarcascades"
+    _haar_dir = _frozen_haar if _frozen_haar.exists() else Path(cv2.data.haarcascades)
+    face_cascade = cv2.CascadeClassifier(str(_haar_dir / "haarcascade_frontalface_default.xml"))
+    profile_cascade = cv2.CascadeClassifier(str(_haar_dir / "haarcascade_profileface.xml"))
     yunet = None
     if YUNET_MODEL_PATH.exists() and hasattr(cv2, "FaceDetectorYN_create"):
         yunet = cv2.FaceDetectorYN_create(
@@ -307,7 +318,9 @@ def detect_webcam_corner(video_path: Path, clip: ClipCandidate) -> CamCorner | N
     capture = cv2.VideoCapture(str(video_path.resolve()))
     if not capture.isOpened():
         return None
-    face_cascade = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"))
+    _frozen_haar = frozen_base() / "cv2" / "data" / "haarcascades"
+    _haar_dir = _frozen_haar if _frozen_haar.exists() else Path(cv2.data.haarcascades)
+    face_cascade = cv2.CascadeClassifier(str(_haar_dir / "haarcascade_frontalface_default.xml"))
 
     duration = max(0.1, clip.end - clip.start)
     offsets = [duration * frac for frac in (0.2, 0.4, 0.6, 0.8)]
@@ -423,12 +436,33 @@ def clean_transcript_text(text: str) -> str:
     return cleaned.strip()
 
 
-def fetch_metadata(url: str) -> dict:
-    ydl_opts = {
+def _ydl_base_opts() -> dict:
+    """Options that reduce YouTube 403s for frozen/desktop builds."""
+    return {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "noprogress": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "web", "mweb", "tv"],
+            }
+        },
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+        },
+        "retries": 10,
+        "fragment_retries": 10,
+        "file_access_retries": 3,
     }
+
+
+def fetch_metadata(url: str) -> dict:
+    ydl_opts = _ydl_base_opts()
     with YoutubeDL(ydl_opts) as ydl:
         return sanitize_metadata(ydl.extract_info(url, download=False))
 
@@ -440,24 +474,34 @@ def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path,
         return existing[0], load_json(info_path)
 
     ydl_opts = {
+        **_ydl_base_opts(),
         "format": (
             "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/"
             "bestvideo[height<=1080]+bestaudio/"
-            "best[height<=1080]/best"
+            "best[height<=1080]/"
+            "best"
         ),
         "outtmpl": str(work_dir / "source.%(ext)s"),
         "merge_output_format": "mp4",
-        "noplaylist": True,
-        "quiet": True,
-        "noprogress": True,
-        "no_warnings": True,
         "ffmpeg_location": ffmpeg_path(),
     }
 
     work_dir.mkdir(parents=True, exist_ok=True)
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        file_path = Path(ydl.prepare_filename(info))
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = Path(ydl.prepare_filename(info))
+    except DownloadError as exc:
+        if "403" not in str(exc):
+            raise
+        fallback_opts = {
+            **ydl_opts,
+            "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
+            "format": "best",
+        }
+        with YoutubeDL(fallback_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = Path(ydl.prepare_filename(info))
 
     if not file_path.exists():
         downloaded = sorted(work_dir.glob("source.*"))
@@ -514,9 +558,12 @@ def transcribe(audio_path: Path, transcript_path: Path, model_name: str, languag
         ]
 
     from faster_whisper import WhisperModel
+    from model_cache import ensure_model, resolve_data_dir
 
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    local_path = ensure_model(model_name, resolve_data_dir())
     console.print(f"[bold]Loading model:[/bold] {model_name}")
-    model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    model = WhisperModel(local_path, device="cpu", compute_type="int8")
     segments, info = model.transcribe(
         str(audio_path),
         language=language,
@@ -799,6 +846,8 @@ CaptionPosition = Literal["center", "bottom"]
 
 # Fonts installed in the backend container (see Dockerfile). Map the FE choice
 # to a real installed family name; anything else falls back to the default.
+# When frozen by PyInstaller, TTF files are bundled under frozen_base()/fonts
+# and resolved by that path instead of system fontconfig.
 AVAILABLE_FONTS = {
     "DejaVu Sans": "DejaVu Sans",
     "DejaVu Serif": "DejaVu Serif",

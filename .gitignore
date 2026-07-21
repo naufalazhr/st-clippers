@@ -4,11 +4,14 @@
 !.env.example
 
 backend/.venv/
+backend/dist/
+backend/build/
 backend/outputs/
 backend/jobs.json
 backend/jobs.json.tmp
 backend/__pycache__/
 backend/**/*.py[cod]
+.venv/
 
 frontend/.next/
 frontend/node_modules/
@@ -18,6 +21,14 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/schemas/
+desktop/src-tauri/resources/sultanclip-backend/
+desktop/src-tauri/binaries/
+
 *.log
 .DS_Store
 Thumbs.db
+.omo/
+node_modules/

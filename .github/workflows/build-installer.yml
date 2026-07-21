@@ -1,0 +1,82 @@
+name: Build Installer
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: mac
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - name: Backend deps + PyInstaller
+        working-directory: backend
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate || . .venv/Scripts/activate
+          pip install -U pip
+          pip install -r requirements.txt pyinstaller
+          bash build_bundle.sh
+      - name: Stage backend onedir into Tauri resources
+        shell: bash
+        run: |
+          mkdir -p desktop/src-tauri/resources
+          rm -rf desktop/src-tauri/resources/sultanclip-backend
+          cp -R backend/dist/sultanclip-backend desktop/src-tauri/resources/sultanclip-backend
+          # Windows exe name
+          if [ -f desktop/src-tauri/resources/sultanclip-backend/sultanclip-backend.exe ]; then
+            ls -la desktop/src-tauri/resources/sultanclip-backend/
+          fi
+      - name: Frontend build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Desktop deps
+        working-directory: desktop
+        run: npm ci
+      - name: Tauri build
+        working-directory: desktop
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "mac" ]; then
+            npx tauri build --target ${{ matrix.target }}
+          else
+            npx tauri build
+          fi
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sultanclip-${{ matrix.platform }}
+          path: |
+            desktop/src-tauri/target/**/bundle/dmg/*.dmg
+            desktop/src-tauri/target/**/bundle/macos/*.app
+            desktop/src-tauri/target/**/bundle/msi/*.msi
+            desktop/src-tauri/target/**/bundle/nsis/*.exe
+          if-no-files-found: error

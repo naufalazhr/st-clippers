@@ -1,7 +1,7 @@
 import type { ClipJob, CreateClipJobInput } from "../types/clip.type";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8010";
-const CLIENT_API_BASE = "";
+const CLIENT_API_BASE = API_BASE;
 
 export const uploadVideo = async (file: File) => {
   const form = new FormData();
@@ -83,6 +83,20 @@ export const createJob = async (input: CreateClipJobInput) => {
   }
 
   return (await response.json()) as ClipJob;
+};
+
+export type ModelStatus = {
+  model_present: boolean;
+  model_name: string;
+  download_progress: number | null;
+};
+
+export const fetchModelStatus = async () => {
+  const response = await fetch(`${API_BASE}/api/model-status`, { cache: "no-store" });
+  if (!response.ok) {
+    return null;
+  }
+  return (await response.json()) as ModelStatus;
 };
 
 export const getOutputUrl = (path: string) => `${API_BASE}${path}`;

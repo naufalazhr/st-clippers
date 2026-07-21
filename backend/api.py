@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -22,9 +23,24 @@ from yt_dlp import YoutubeDL
 
 
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUTS_DIR = BASE_DIR / "outputs"
-UPLOADS_DIR = BASE_DIR / "uploads"
-JOBS_PATH = BASE_DIR / "jobs.json"
+
+
+def resolve_data_dir() -> Path:
+    if env := os.environ.get("SULTANCLIP_DATA_DIR"):
+        path = Path(env)
+    elif sys.platform == "darwin":
+        path = Path.home() / "Library" / "Application Support" / "SultanClip"
+    elif sys.platform == "win32":
+        path = Path(os.environ.get("APPDATA", str(BASE_DIR))) / "SultanClip"
+    else:
+        path = BASE_DIR
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+OUTPUTS_DIR = resolve_data_dir() / "outputs"
+UPLOADS_DIR = resolve_data_dir() / "uploads"
+JOBS_PATH = resolve_data_dir() / "jobs.json"
 ALLOWED_UPLOAD_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"}
 SECONDS_PER_TARGET_CLIP = 360
 MIN_AUTO_CLIPS = 2
@@ -105,7 +121,7 @@ class ClipJob(BaseModel):
 app = FastAPI(title="Sultan Clip API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "tauri://localhost", "https://tauri.localhost"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -255,16 +271,16 @@ def clamp(value: int, minimum: int, maximum: int) -> int:
 
 
 def fetch_video_duration(url: str) -> float | None:
+    from clipper import _ydl_base_opts
+
     ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
+        **_ydl_base_opts(),
         "skip_download": True,
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-    except Exception:
+    except Exception:  # noqa: BROAD_EXCEPT_OK — probe endpoint soft-fails
         return None
 
     duration = info.get("duration") if isinstance(info, dict) else None
@@ -328,7 +344,10 @@ def normalize_job_request(request: ClipJobRequest) -> ClipJobRequest:
 
 
 def build_clipper_command(request: ClipJobRequest) -> list[str]:
-    command = [sys.executable, "clipper.py"]
+    if getattr(sys, "frozen", False):
+        command = [sys.executable, "--clipper"]
+    else:
+        command = [sys.executable, "clipper.py"]
     if request.source_file:
         command.extend(["--source-file", request.source_file])
     else:
@@ -373,6 +392,7 @@ def build_clipper_command(request: ClipJobRequest) -> list[str]:
             command.extend(["--ai-model", request.ai_model])
         if request.ai_api_key:
             command.extend(["--ai-api-key", request.ai_api_key])
+    command.extend(["--output", str(OUTPUTS_DIR.resolve())])
     return command
 
 
@@ -388,9 +408,20 @@ def run_job(job_id: str) -> None:
     set_job(job_id, status="running", error=None)
     command = build_clipper_command(request)
 
+    if getattr(sys, "frozen", False):
+        env = os.environ.copy()
+        env.setdefault("SULTANCLIP_DATA_DIR", str(resolve_data_dir()))
+        env["PYTHONNOUSERSITE"] = "1"
+        popen_env = env
+        popen_cwd = resolve_data_dir()
+    else:
+        popen_env = None
+        popen_cwd = BASE_DIR
+
     process = subprocess.Popen(
         command,
-        cwd=BASE_DIR,
+        cwd=popen_cwd,
+        env=popen_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -437,6 +468,18 @@ def run_job(job_id: str) -> None:
                 upload_path.unlink()
             except OSError:
                 pass
+
+
+@app.get("/api/model-status")
+def model_status() -> dict[str, str | bool | float | None]:
+    from model_cache import model_present, get_download_progress, get_current_model, resolve_data_dir
+
+    name = get_current_model()
+    return {
+        "model_present": model_present(resolve_data_dir(), name),
+        "model_name": name,
+        "download_progress": get_download_progress(),
+    }
 
 
 @app.get("/api/health")

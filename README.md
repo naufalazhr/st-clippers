@@ -214,6 +214,63 @@ For remote servers, point `NEXT_PUBLIC_API_BASE` to the public backend URL.
 
 ---
 
+## Desktop Installer
+
+Sultan Clip can be packaged as a native desktop app via Tauri v2 + PyInstaller.
+
+### How to build (local)
+
+```bash
+# 1. Frontend static export
+cd frontend && npm ci && npm run build && cd ..
+
+# 2. Backend bundle (PyInstaller onedir)
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt pyinstaller
+bash build_bundle.sh
+cd ..
+
+# 3. Stage sidecar binary for Tauri
+mkdir -p desktop/src-tauri/binaries
+cp backend/dist/sultanclip-backend/sultanclip-backend desktop/src-tauri/binaries/sultanclip-backend-aarch64-apple-darwin
+
+# 4. Build desktop app
+cd desktop
+npm ci
+npx tauri build --target aarch64-apple-darwin
+```
+
+On Windows omit `--target` and use `sultanclip-backend-x86_64-pc-windows-msvc.exe` as the sidecar filename.
+
+### CI build
+
+Push to `main` triggers `.github/workflows/build-installer.yml` which produces `.dmg` (macOS arm64) and `.msi` (Windows x64) as workflow artifacts.
+
+### Unsigned install
+
+The installers are **not code-signed**, so Gatekeeper (macOS) and SmartScreen (Windows) will warn:
+
+**macOS:** Right-click the `.app` → **Open**, or run `xattr -cr /Applications/SultanClip.app` in Terminal.
+
+**Windows:** Click **More info** → **Run anyway** on the SmartScreen prompt.
+
+### First run
+
+The first launch downloads the faster-whisper model (~500 MB). Subsequent launches use the cached model.
+
+### Data directories
+
+- **macOS:** `~/Library/Application Support/SultanClip/`
+- **Windows:** `%APPDATA%\SultanClip\`
+
+### Intel Mac
+
+The arm64 build runs on Intel Macs via Rosetta 2.
+
+---
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE). Third-party attributions in [`NOTICE`](NOTICE).

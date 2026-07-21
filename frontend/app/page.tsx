@@ -43,6 +43,7 @@ import { ResultsSection } from "./_components/ResultsSection";
 import { SiteFooter } from "./_components/SiteFooter";
 import { StatusPanel } from "./_components/StatusPanel";
 import { Topbar } from "./_components/Topbar";
+import { ModelDownloadProgress } from "./_components/ModelDownloadProgress";
 
 export default function HomePage() {
   const [url, setUrl] = useState("");
@@ -285,6 +286,7 @@ export default function HomePage() {
   return (
     <main className="shell py-28">
       <Topbar onRefresh={loadJobs} />
+      <ModelDownloadProgress />
 
       <section className="workspace">
         <div className="doppelrand workspace-main">
