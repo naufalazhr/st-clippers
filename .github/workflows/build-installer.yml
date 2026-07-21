@@ -39,19 +39,40 @@ jobs:
         shell: bash
         run: |
           python -m venv .venv
-          source .venv/bin/activate || . .venv/Scripts/activate
-          pip install -U pip
-          pip install -r requirements.txt pyinstaller
+          # Windows venv uses Scripts/; Unix uses bin/
+          if [ -f .venv/Scripts/activate ]; then
+            # shellcheck disable=SC1091
+            source .venv/Scripts/activate
+          elif [ -f .venv/bin/activate ]; then
+            # shellcheck disable=SC1091
+            source .venv/bin/activate
+          else
+            echo "venv activate script not found"
+            exit 1
+          fi
+          # Always use python -m pip (works on Windows after activate)
+          python -m pip install -U pip
+          python -m pip install -r requirements.txt pyinstaller
           bash build_bundle.sh
+          # Sanity: onedir must exist (exe name differs on Windows)
+          ls -la dist/sultanclip-backend/ || ls -la dist/
+          test -f dist/sultanclip-backend/sultanclip-backend.exe \
+            -o -f dist/sultanclip-backend/sultanclip-backend
       - name: Stage backend onedir into Tauri resources
         shell: bash
         run: |
           mkdir -p desktop/src-tauri/resources
           rm -rf desktop/src-tauri/resources/sultanclip-backend
           cp -R backend/dist/sultanclip-backend desktop/src-tauri/resources/sultanclip-backend
-          # Windows exe name
+          ls -la desktop/src-tauri/resources/sultanclip-backend/ | head -20
+          # Windows: ensure .exe is present for lib.rs lookup
           if [ -f desktop/src-tauri/resources/sultanclip-backend/sultanclip-backend.exe ]; then
-            ls -la desktop/src-tauri/resources/sultanclip-backend/
+            echo "Windows backend exe staged"
+          elif [ -f desktop/src-tauri/resources/sultanclip-backend/sultanclip-backend ]; then
+            echo "Unix backend binary staged"
+          else
+            echo "ERROR: backend binary missing after stage"
+            exit 1
           fi
       - name: Frontend build
         working-directory: frontend

@@ -19,31 +19,48 @@ impl BackendProcess {
     }
 }
 
+fn backend_exe_name() -> &'static str {
+    if cfg!(windows) {
+        "sultanclip-backend.exe"
+    } else {
+        "sultanclip-backend"
+    }
+}
+
+fn dir_has_backend(dir: &PathBuf) -> bool {
+    dir.join(backend_exe_name()).exists() || dir.join("sultanclip-backend").exists()
+}
+
 fn get_backend_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let resource_dir = app.path().resource_dir()?;
-    let prod_path = resource_dir.join("sultanclip-backend");
-    if prod_path.join("sultanclip-backend").exists() {
-        return Ok(prod_path);
-    }
-    let dev_path = resource_dir.join("resources/sultanclip-backend");
-    if dev_path.join("sultanclip-backend").exists() {
-        return Ok(dev_path);
-    }
-    let cargo_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/sultanclip-backend");
-    if cargo_path.join("sultanclip-backend").exists() {
-        return Ok(cargo_path);
+    let candidates = [
+        resource_dir.join("sultanclip-backend"),
+        resource_dir.join("resources/sultanclip-backend"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/sultanclip-backend"),
+    ];
+    for path in &candidates {
+        if dir_has_backend(path) {
+            return Ok(path.clone());
+        }
     }
     Err(format!(
-        "Backend binary not found (tried {:?}, {:?}, {:?})",
-        prod_path, dev_path, cargo_path
+        "Backend binary not found (tried {:?})",
+        candidates
     )
     .into())
 }
 
 fn spawn_backend(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let backend_dir = get_backend_dir(app)?;
-    let backend_exe = backend_dir.join("sultanclip-backend");
+    let backend_exe = {
+        let win = backend_dir.join("sultanclip-backend.exe");
+        let unix = backend_dir.join("sultanclip-backend");
+        if win.exists() {
+            win
+        } else {
+            unix
+        }
+    };
 
     let mut child = Command::new(&backend_exe)
         .args(["--port", "8010"])
