@@ -258,6 +258,19 @@ def discover_candidates(started_at: float) -> list[ClipCandidate]:
     return [ClipCandidate(**item) for item in payload]
 
 
+def discover_work_dir(started_at: float) -> str | None:
+    candidate_files = [
+        path
+        for path in OUTPUTS_DIR.rglob("candidates*.json")
+        if path.stat().st_mtime + 1 >= started_at
+    ]
+    if not candidate_files:
+        return None
+    latest = max(candidate_files, key=lambda p: p.stat().st_mtime)
+    parent = latest.parent.resolve()
+    return parent.relative_to(OUTPUTS_DIR.resolve()).as_posix()
+
+
 def set_job(job_id: str, **updates) -> None:
     with jobs_lock:
         job = jobs[job_id]
@@ -402,6 +415,7 @@ def build_clipper_command(request: ClipJobRequest) -> list[str]:
             command.extend(["--ai-model", request.ai_model])
         if request.ai_api_key:
             command.extend(["--ai-api-key", request.ai_api_key])
+    command.append("--keep-intermediate")
     command.extend(["--output", str(OUTPUTS_DIR.resolve())])
     return command
 
@@ -452,7 +466,10 @@ def run_job(job_id: str) -> None:
     clips = discover_clips(started_at)
     candidates = discover_candidates(started_at)
     if code == 0:
+        work_dir = discover_work_dir(started_at)
         updates = {"status": "completed", "logs": logs[-120:]}
+        if work_dir:
+            updates["work_dir"] = work_dir
         if clips:
             updates["clips"] = clips
         if candidates:
