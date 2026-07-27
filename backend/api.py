@@ -98,6 +98,19 @@ class ClipCandidate(BaseModel):
     text: str
 
 
+class TranscriptSegmentOut(BaseModel):
+    start: float
+    end: float
+    text: str
+
+
+class TimelineData(BaseModel):
+    source_url: str
+    duration: float
+    segments: list[TranscriptSegmentOut]
+    candidates: list[ClipCandidate]
+
+
 class ClipFile(BaseModel):
     name: str
     url: str
@@ -647,3 +660,33 @@ def get_job(job_id: str) -> ClipJob:
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@app.get("/api/jobs/{job_id}/timeline", response_model=TimelineData)
+def get_job_timeline(job_id: str) -> TimelineData:
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.work_dir:
+        raise HTTPException(status_code=404, detail="Source not available")
+
+    work_dir = OUTPUTS_DIR / job.work_dir
+    source_path = next(work_dir.glob("source.*"), None)
+    if not source_path:
+        raise HTTPException(status_code=404, detail="Source not available")
+
+    duration = probe_media_duration(source_path) or 0.0
+
+    transcript_files = sorted(work_dir.glob("transcript*.json"), key=lambda p: p.stat().st_mtime)
+    segments: list[TranscriptSegmentOut] = []
+    if transcript_files:
+        rows = json.loads(transcript_files[-1].read_text(encoding="utf-8"))
+        segments = [TranscriptSegmentOut(**s) for s in rows]
+
+    return TimelineData(
+        source_url=clip_url(source_path),
+        duration=duration,
+        segments=segments,
+        candidates=job.candidates,
+    )
