@@ -355,7 +355,7 @@ export default function HomePage() {
 
       <div className="doppelrand results">
         <div className="doppelrand-inner">
-          <ResultsSection clips={job?.clips ?? []} />
+          <ResultsSection job={job} onJobRefresh={() => activeJobId && getJob(activeJobId).then(setJob)} />
         </div>
       </div>
       <div className="doppelrand history">
