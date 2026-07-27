@@ -111,6 +111,12 @@ class TimelineData(BaseModel):
     candidates: list[ClipCandidate]
 
 
+class RecutRequest(BaseModel):
+    index: int
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+
+
 class ClipFile(BaseModel):
     name: str
     url: str
@@ -231,28 +237,26 @@ def clip_url(path: Path) -> str:
     return "/outputs/" + quote(relative)
 
 
+def clip_file_from_path(path: Path) -> ClipFile:
+    thumb_path = path.with_name(f"{path.stem}_thumb.jpg")
+    prompt_path = path.with_name(f"{path.stem}_thumb.txt")
+    caption_path = path.with_name(f"{path.stem}_caption.txt")
+    return ClipFile(
+        name=path.name,
+        url=clip_url(path),
+        size_bytes=path.stat().st_size,
+        thumbnail_url=clip_url(thumb_path) if thumb_path.exists() else None,
+        thumbnail_prompt=prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else None,
+        social_caption=caption_path.read_text(encoding="utf-8") if caption_path.exists() else None,
+    )
+
+
 def discover_clips(started_at: float) -> list[ClipFile]:
     clips: list[ClipFile] = []
     for path in OUTPUTS_DIR.rglob("clips/*.mp4"):
         if path.stat().st_mtime + 1 < started_at:
             continue
-        thumb_path = path.with_name(f"{path.stem}_thumb.jpg")
-        prompt_path = path.with_name(f"{path.stem}_thumb.txt")
-        caption_path = path.with_name(f"{path.stem}_caption.txt")
-        clips.append(
-            ClipFile(
-                name=path.name,
-                url=clip_url(path),
-                size_bytes=path.stat().st_size,
-                thumbnail_url=clip_url(thumb_path) if thumb_path.exists() else None,
-                thumbnail_prompt=(
-                    prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else None
-                ),
-                social_caption=(
-                    caption_path.read_text(encoding="utf-8") if caption_path.exists() else None
-                ),
-            )
-        )
+        clips.append(clip_file_from_path(path))
     clips.sort(key=lambda item: item.name)
     return clips
 
@@ -282,6 +286,76 @@ def discover_work_dir(started_at: float) -> str | None:
     latest = max(candidate_files, key=lambda p: p.stat().st_mtime)
     parent = latest.parent.resolve()
     return parent.relative_to(OUTPUTS_DIR.resolve()).as_posix()
+
+
+def recut_clip(job: ClipJob, index: int, start: float, end: float) -> tuple[ClipFile, ClipCandidate]:
+    # Lazy import: clipper has its own ClipCandidate dataclass; api.py has a pydantic model of the same name.
+    from clipper import ClipCandidate as ClipCandidateDC, TranscriptSegment as TranscriptSegmentDC
+    from clipper import segments_for_clip, CaptionStyle, AIConfig, export_clip
+
+    req = job.request
+    work_dir = OUTPUTS_DIR / job.work_dir
+    source = next(work_dir.glob("source.*"), None)
+    if not source:
+        raise ValueError("source not available")
+
+    transcript_files = sorted(work_dir.glob("transcript*.json"), key=lambda p: p.stat().st_mtime)
+    if not transcript_files:
+        raise ValueError("no transcript")
+    rows = json.loads(transcript_files[-1].read_text(encoding="utf-8"))
+    segments = [TranscriptSegmentDC(**s) for s in rows]
+
+    duration = probe_media_duration(source) or max((s.end for s in segments), default=0)
+
+    if start >= end:
+        raise ValueError("start must be before end")
+    if end > duration:
+        raise ValueError("end exceeds video duration")
+
+    cand = next((c for c in job.candidates if c.index == index), None)
+    if cand is None:
+        raise ValueError("candidate not found")
+
+    dc_cand = ClipCandidateDC(
+        index=index,
+        start=start,
+        end=end,
+        duration=end - start,
+        score=cand.score,
+        title=cand.title,
+        reason=cand.reason,
+        text=cand.text,
+    )
+    clip_segments = segments_for_clip(segments, dc_cand)
+
+    caption = CaptionStyle(
+        font_size=req.caption_font_size,
+        position=req.caption_position,
+        color=req.caption_color,
+        font_family=req.caption_font,
+        outline_width=req.caption_outline,
+        outline_color=req.caption_outline_color,
+    )
+    ai = AIConfig(enabled=False)
+
+    out_path = export_clip(
+        video_path=source,
+        clip=dc_cand,
+        clip_segments=clip_segments,
+        clips_dir=work_dir / "clips",
+        burn_subtitles=req.burn_subtitles,
+        crop_mode=req.crop_mode,
+        caption=caption,
+        ai_config=ai,
+        cam_corner=req.cam_corner,
+        required_hashtags=req.required_hashtags,
+    )
+
+    py_cand = ClipCandidate(
+        index=index, start=start, end=end, duration=end - start,
+        score=cand.score, title=cand.title, reason=cand.reason, text=cand.text,
+    )
+    return clip_file_from_path(out_path), py_cand
 
 
 def set_job(job_id: str, **updates) -> None:
@@ -690,3 +764,24 @@ def get_job_timeline(job_id: str) -> TimelineData:
         segments=segments,
         candidates=job.candidates,
     )
+
+
+@app.post("/api/jobs/{job_id}/recut")
+def recut_job(job_id: str, body: RecutRequest) -> dict[str, ClipFile | ClipCandidate]:
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.work_dir:
+        raise HTTPException(status_code=404, detail="Source not available")
+
+    try:
+        new_clip, new_cand = recut_clip(job, body.index, body.start, body.end)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    new_clips = [new_clip if c.name == new_clip.name else c for c in job.clips]
+    new_cands = [new_cand if c.index == body.index else c for c in job.candidates]
+    set_job(job_id, clips=new_clips, candidates=new_cands)
+
+    return {"clip": new_clip.model_dump(), "candidate": new_cand.model_dump()}
