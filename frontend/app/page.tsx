@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import {
   createJob,
@@ -44,10 +44,20 @@ import { SiteFooter } from "./_components/SiteFooter";
 import { StatusPanel } from "./_components/StatusPanel";
 import { Topbar } from "./_components/Topbar";
 import { ModelDownloadProgress } from "./_components/ModelDownloadProgress";
+import { isInTauri, useMenuActions, openExternal } from "../lib/desktop";
+import { toggleTheme } from "../lib/theme";
+import { AboutDialog } from "./_components/desktop/AboutDialog";
+import { DesktopShell, type DesktopView } from "./_components/desktop/DesktopShell";
+import { Sidebar } from "./_components/desktop/Sidebar";
+import { StatusBar } from "./_components/desktop/StatusBar";
+import { HistoryTable } from "./_components/desktop/HistoryTable";
+import { InspectorPanel } from "./_components/desktop/InspectorPanel";
+import "./_components/desktop/motion.css";
 
 export default function HomePage() {
-  const [url, setUrl] = useState("");
-  const [sourceMode, setSourceMode] = useState<SourceMode>("url");
+   const [url, setUrl] = useState("");
+   const [name, setName] = useState("");
+   const [sourceMode, setSourceMode] = useState<SourceMode>("url");
   const [uploadToken, setUploadToken] = useState("");
   const [uploadFileName, setUploadFileName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -76,6 +86,14 @@ export default function HomePage() {
   const [jobs, setJobs] = useState<ClipJob[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [isDesktop, setIsDesktop] = useState(false);
+  useLayoutEffect(() => { setIsDesktop(isInTauri()); }, []);
+  const [view, setView] = useState<DesktopView>("editor");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showStatusbar, setShowStatusbar] = useState(true);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [jobsLoading, setJobsLoading] = useState(true);
 
   const activeJobId = job?.id;
   const isBusy = isActiveJob(job);
@@ -106,27 +124,28 @@ export default function HomePage() {
   }, [url, sourceMode]);
 
   const loadJobs = useCallback(async () => {
-    setJobs(await getJobs());
+    setJobsLoading(true);
+    try {
+      setJobs(await getJobs());
+    } finally {
+      setJobsLoading(false);
+    }
   }, []);
+
+   const resetForm = useCallback(() => {
+     setJob(null);
+     setUrl("");
+     setName("");
+     setUploadToken("");
+     setUploadFileName("");
+     setVideoDuration(null);
+     setUploadPreviewUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return ""; });
+     setError("");
+   }, []);
 
   useEffect(() => {
     loadJobs().catch(() => undefined);
   }, [loadJobs]);
-
-  useEffect(() => {
-    if (!activeJobId) return;
-
-    const interval = window.setInterval(async () => {
-      const nextJob = await getJob(activeJobId);
-      setJob(nextJob);
-
-      if (nextJob.status === "completed" || nextJob.status === "failed") {
-        loadJobs().catch(() => undefined);
-      }
-    }, JOB_POLL_INTERVAL_MS);
-
-    return () => window.clearInterval(interval);
-  }, [activeJobId, loadJobs]);
 
   const handleLoadModels = useCallback(async () => {
     const base = aiBaseUrl.trim();
@@ -145,12 +164,60 @@ export default function HomePage() {
     } finally {
       setIsLoadingModels(false);
     }
-  }, [aiBaseUrl, aiApiKey]);
+   }, [aiBaseUrl, aiApiKey]);
 
   const handleSourceModeChange = useCallback((mode: SourceMode) => {
     setSourceMode(mode);
     setError("");
   }, []);
+
+  const handleMenuAction = useCallback((itemId: string) => {
+    switch (itemId) {
+      case "view.refresh":
+        loadJobs();
+        break;
+      case "file.new-job":
+        setView("editor");
+        resetForm();
+        requestAnimationFrame(() => {
+          document.getElementById("url-input")?.focus();
+        });
+        break;
+      case "file.open-video":
+        setView("editor");
+        handleSourceModeChange("upload");
+        requestAnimationFrame(() => {
+          (document.getElementById("video-file-input") as HTMLInputElement | null)?.click();
+        });
+        break;
+      case "view.theme":
+        toggleTheme();
+        break;
+      case "view.sidebar":
+        setShowSidebar((v) => !v);
+        break;
+      case "view.statusbar":
+        setShowStatusbar((v) => !v);
+        break;
+      case "help.docs":
+        void openExternal("https://github.com/sultantech/st-clippers");
+        break;
+      case "help.about":
+        setAboutOpen(true);
+        break;
+    }
+  }, [loadJobs, resetForm, handleSourceModeChange]);
+
+  useMenuActions(handleMenuAction);
+
+  useEffect(() => {
+    if (!job && jobs.length > 0) {
+      const completedJob = jobs.find((j) => j.status === "completed");
+      if (completedJob) {
+        setJob(completedJob);
+      }
+    }
+  }, [jobs, job]);
 
   const handleUploadFileChange = useCallback(async (file: File | null) => {
     setError("");
@@ -172,9 +239,10 @@ export default function HomePage() {
         success: "Video berhasil diunggah!",
         error: "Gagal mengunggah video",
       });
-      setUploadToken(result.source_file);
-      setUploadFileName(result.original_name);
-      setVideoDuration(result.duration);
+       setUploadToken(result.source_file);
+       setUploadFileName(result.original_name);
+       setVideoDuration(result.duration);
+       setName((prev) => (prev.trim() ? prev : result.original_name.replace(/\.[^.]+$/, "")));
     } catch (uploadError) {
       setUploadToken("");
       setVideoDuration(null);
@@ -203,8 +271,9 @@ export default function HomePage() {
     try {
       const nextJob = await toast.promise(
         createJob({
-          url: sourceMode === "url" ? trimmedUrl : "",
-          source_file: sourceMode === "upload" ? uploadToken : "",
+           url: sourceMode === "url" ? trimmedUrl : "",
+           source_file: sourceMode === "upload" ? uploadToken : "",
+           name: name.trim(),
           top: targetClips > 0 ? targetClips : undefined,
           min_duration: minDuration,
           max_duration: maxDuration,
@@ -236,6 +305,7 @@ export default function HomePage() {
       );
 
       setJob(nextJob);
+      setView("clip");
       await loadJobs();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Gagal memulai proses.");
@@ -243,28 +313,29 @@ export default function HomePage() {
       setIsSubmitting(false);
     }
   }, [
-    aiApiKey,
-    aiBaseUrl,
-    aiEnabled,
-    aiModel,
-    burnSubtitles,
-    camCorner,
-    captionColor,
-    captionFont,
-    captionFontSize,
-    captionOutline,
-    captionOutlineColor,
-    captionPosition,
-    cropMode,
-    loadJobs,
-    maxDuration,
-    minDuration,
-    requiredHashtags,
-    sourceMode,
-    targetClips,
-    uploadToken,
-    url,
-  ]);
+     aiApiKey,
+     aiBaseUrl,
+     aiEnabled,
+     aiModel,
+     burnSubtitles,
+     camCorner,
+     captionColor,
+     captionFont,
+     captionFontSize,
+     captionOutline,
+     captionOutlineColor,
+     captionPosition,
+     cropMode,
+     loadJobs,
+     maxDuration,
+     minDuration,
+     name,
+     requiredHashtags,
+     sourceMode,
+     targetClips,
+     uploadToken,
+     url,
+   ]);
 
   const handleDeleteAllConfirmed = useCallback(async () => {
     await toast.promise(deleteJobs(), {
@@ -283,87 +354,195 @@ export default function HomePage() {
     });
   }, [handleDeleteAllConfirmed]);
 
+  if (isDesktop) {
+    return (
+      <DesktopShell
+        view={view}
+        onViewChange={setView}
+        showSidebar={showSidebar}
+        showStatusbar={showStatusbar}
+        onToggleSidebar={() => setShowSidebar((v) => !v)}
+        onToggleStatusbar={() => setShowStatusbar((v) => !v)}
+        sidebar={
+          <Sidebar
+            view={view}
+            onViewChange={setView}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+          />
+        }
+        canvas={
+          view === "editor" ? (
+            <InspectorPanel
+               cropMode={cropMode}
+               error={error}
+               isBusy={isBusy}
+               isSubmitting={isSubmitting}
+               sourceMode={sourceMode}
+               uploadFileName={uploadFileName}
+               uploadPreviewUrl={uploadPreviewUrl}
+               isUploading={isUploading}
+               camCorner={camCorner}
+               onCamCornerChange={setCamCorner}
+               onSourceModeChange={handleSourceModeChange}
+               onUploadFileChange={handleUploadFileChange}
+               maxDuration={maxDuration}
+               minDuration={minDuration}
+               targetClips={targetClips}
+               maxClips={maxClips}
+               videoDuration={videoDuration}
+               onTargetClipsChange={setTargetClips}
+               burnSubtitles={burnSubtitles}
+               captionFontSize={captionFontSize}
+               captionPosition={captionPosition}
+               captionColor={captionColor}
+               captionFont={captionFont}
+               captionOutline={captionOutline}
+               captionOutlineColor={captionOutlineColor}
+               onCaptionFontChange={setCaptionFont}
+               onCaptionOutlineChange={setCaptionOutline}
+               onCaptionOutlineColorChange={setCaptionOutlineColor}
+               aiEnabled={aiEnabled}
+               aiBaseUrl={aiBaseUrl}
+               aiModel={aiModel}
+               aiApiKey={aiApiKey}
+               aiModels={aiModels}
+               isLoadingModels={isLoadingModels}
+               onLoadModels={handleLoadModels}
+               requiredHashtags={requiredHashtags}
+               onRequiredHashtagsChange={setRequiredHashtags}
+               onCropModeChange={setCropMode}
+               onMaxDurationChange={setMaxDuration}
+               onMinDurationChange={setMinDuration}
+               onBurnSubtitlesChange={setBurnSubtitles}
+               onCaptionFontSizeChange={setCaptionFontSize}
+               onCaptionPositionChange={setCaptionPosition}
+               onCaptionColorChange={setCaptionColor}
+               onAiEnabledChange={setAiEnabled}
+               onAiBaseUrlChange={setAiBaseUrl}
+               onAiModelChange={setAiModel}
+               onAiApiKeyChange={setAiApiKey}
+               onStartJob={handleStartJob}
+               onUrlChange={setUrl}
+               url={url}
+               name={name}
+               onNameChange={setName}
+             />
+          ) : view === "clip" ? (
+            jobsLoading && !job ? (
+              <div className="skeleton-cards">
+                <div className="skeleton skeleton-card" />
+                <div className="skeleton skeleton-card" />
+                <div className="skeleton skeleton-card" />
+              </div>
+            ) : (
+              <>
+                <ModelDownloadProgress />
+                <ResultsSection job={job} onJobRefresh={() => activeJobId && getJob(activeJobId).then(setJob)} />
+              </>
+            )
+          ) : (
+            <HistoryTable jobs={jobs} loading={jobsLoading} onSelectJob={setJob} onDeleteAll={handleDeleteAll} onViewChange={setView} />
+          )
+        }
+        statusbar={
+          <StatusBar
+            job={job}
+            logs={latestLogs}
+            showSidebar={showSidebar}
+            onToggleSidebar={() => setShowSidebar((v) => !v)}
+          />
+        }
+      />
+    );
+  }
+
   return (
-    <main className="shell py-28">
-      <Topbar onRefresh={loadJobs} />
-      <ModelDownloadProgress />
+    <>
+      <main className="shell py-28">
+        <Topbar onRefresh={loadJobs} />
+        <ModelDownloadProgress />
 
-      <section className="workspace">
-        <div className="doppelrand workspace-main">
+        <section className="workspace">
+          <div className="doppelrand workspace-main">
+            <div className="doppelrand-inner">
+               <ControlPanel
+                 cropMode={cropMode}
+                 error={error}
+                 isBusy={isBusy}
+                 isSubmitting={isSubmitting}
+                 sourceMode={sourceMode}
+                 uploadFileName={uploadFileName}
+                 uploadPreviewUrl={uploadPreviewUrl}
+                 isUploading={isUploading}
+                 camCorner={camCorner}
+                 onCamCornerChange={setCamCorner}
+                 onSourceModeChange={handleSourceModeChange}
+                 onUploadFileChange={handleUploadFileChange}
+                 maxDuration={maxDuration}
+                 minDuration={minDuration}
+                 targetClips={targetClips}
+                 maxClips={maxClips}
+                 videoDuration={videoDuration}
+                 onTargetClipsChange={setTargetClips}
+                 burnSubtitles={burnSubtitles}
+                 captionFontSize={captionFontSize}
+                 captionPosition={captionPosition}
+                 captionColor={captionColor}
+                 captionFont={captionFont}
+                 captionOutline={captionOutline}
+                 captionOutlineColor={captionOutlineColor}
+                 onCaptionFontChange={setCaptionFont}
+                 onCaptionOutlineChange={setCaptionOutline}
+                 onCaptionOutlineColorChange={setCaptionOutlineColor}
+                 aiEnabled={aiEnabled}
+                 aiBaseUrl={aiBaseUrl}
+                 aiModel={aiModel}
+                 aiApiKey={aiApiKey}
+                 aiModels={aiModels}
+                 isLoadingModels={isLoadingModels}
+                 onLoadModels={handleLoadModels}
+                 requiredHashtags={requiredHashtags}
+                 onRequiredHashtagsChange={setRequiredHashtags}
+                 onCropModeChange={setCropMode}
+                 onMaxDurationChange={setMaxDuration}
+                 onMinDurationChange={setMinDuration}
+                 onBurnSubtitlesChange={setBurnSubtitles}
+                 onCaptionFontSizeChange={setCaptionFontSize}
+                 onCaptionPositionChange={setCaptionPosition}
+                 onCaptionColorChange={setCaptionColor}
+                 onAiEnabledChange={setAiEnabled}
+                 onAiBaseUrlChange={setAiBaseUrl}
+                 onAiModelChange={setAiModel}
+                 onAiApiKeyChange={setAiApiKey}
+                 onStartJob={handleStartJob}
+                 onUrlChange={setUrl}
+                 url={url}
+                 name={name}
+                 onNameChange={setName}
+               />
+            </div>
+          </div>
+          <div className="doppelrand workspace-side">
+            <div className="doppelrand-inner">
+              <StatusPanel job={job} latestLogs={latestLogs} />
+            </div>
+          </div>
+        </section>
+
+        <div className="doppelrand results">
           <div className="doppelrand-inner">
-            <ControlPanel
-              cropMode={cropMode}
-              error={error}
-              isBusy={isBusy}
-              isSubmitting={isSubmitting}
-              sourceMode={sourceMode}
-              uploadFileName={uploadFileName}
-              uploadPreviewUrl={uploadPreviewUrl}
-              isUploading={isUploading}
-              camCorner={camCorner}
-              onCamCornerChange={setCamCorner}
-              onSourceModeChange={handleSourceModeChange}
-              onUploadFileChange={handleUploadFileChange}
-              maxDuration={maxDuration}
-              minDuration={minDuration}
-              targetClips={targetClips}
-              maxClips={maxClips}
-              videoDuration={videoDuration}
-              onTargetClipsChange={setTargetClips}
-              burnSubtitles={burnSubtitles}
-              captionFontSize={captionFontSize}
-              captionPosition={captionPosition}
-              captionColor={captionColor}
-              captionFont={captionFont}
-              captionOutline={captionOutline}
-              captionOutlineColor={captionOutlineColor}
-              onCaptionFontChange={setCaptionFont}
-              onCaptionOutlineChange={setCaptionOutline}
-              onCaptionOutlineColorChange={setCaptionOutlineColor}
-              aiEnabled={aiEnabled}
-              aiBaseUrl={aiBaseUrl}
-              aiModel={aiModel}
-              aiApiKey={aiApiKey}
-              aiModels={aiModels}
-              isLoadingModels={isLoadingModels}
-              onLoadModels={handleLoadModels}
-              requiredHashtags={requiredHashtags}
-              onRequiredHashtagsChange={setRequiredHashtags}
-              onCropModeChange={setCropMode}
-              onMaxDurationChange={setMaxDuration}
-              onMinDurationChange={setMinDuration}
-              onBurnSubtitlesChange={setBurnSubtitles}
-              onCaptionFontSizeChange={setCaptionFontSize}
-              onCaptionPositionChange={setCaptionPosition}
-              onCaptionColorChange={setCaptionColor}
-              onAiEnabledChange={setAiEnabled}
-              onAiBaseUrlChange={setAiBaseUrl}
-              onAiModelChange={setAiModel}
-              onAiApiKeyChange={setAiApiKey}
-              onStartJob={handleStartJob}
-              onUrlChange={setUrl}
-              url={url}
-            />
+            <ResultsSection job={job} onJobRefresh={() => activeJobId && getJob(activeJobId).then(setJob)} />
           </div>
         </div>
-        <div className="doppelrand workspace-side">
+        <div className="doppelrand history">
           <div className="doppelrand-inner">
-            <StatusPanel job={job} latestLogs={latestLogs} />
+            <HistorySection jobs={jobs} onDeleteAll={handleDeleteAll} onSelectJob={setJob} />
           </div>
         </div>
-      </section>
-
-      <div className="doppelrand results">
-        <div className="doppelrand-inner">
-          <ResultsSection job={job} onJobRefresh={() => activeJobId && getJob(activeJobId).then(setJob)} />
-        </div>
-      </div>
-      <div className="doppelrand history">
-        <div className="doppelrand-inner">
-          <HistorySection jobs={jobs} onDeleteAll={handleDeleteAll} onSelectJob={setJob} />
-        </div>
-      </div>
-      <SiteFooter />
-    </main>
+        <SiteFooter />
+      </main>
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+    </>
   );
 }

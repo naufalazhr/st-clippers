@@ -1,0 +1,180 @@
+/* ── Filters ── */
+.historyTable-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 14px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.historyTable-filters input[type="text"] {
+  flex: 1;
+  min-width: 180px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.historyTable-filters input[type="date"] {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.historyTable-filters label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.historyTable-filters .iconButton {
+  flex-shrink: 0;
+}
+
+/* ── HistoryTable ── */
+.historyTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.historyTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.historyTable th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+  white-space: nowrap;
+}
+
+.historyTable-sortBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.historyTable-sortBtn:hover {
+  color: var(--text-primary);
+}
+
+.historyTable-actionsCol {
+  width: 44px;
+  text-align: center;
+}
+
+.historyTable-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.historyTable-row:hover {
+  background: var(--panel-hover);
+  box-shadow: inset 2px 0 0 var(--primary-soft);
+}
+
+.historyTable-row td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.historyTable-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.historyTable-chevron {
+  width: 32px;
+  text-align: center;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.historyTable-row:hover .historyTable-chevron {
+  opacity: 1;
+}
+
+/* ── Status badge (reuse StatusBar pattern) ── */
+.statusBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.statusBadge.status-queued { background: var(--text-secondary); color: var(--bg); }
+.statusBadge.status-running { background: var(--warning); color: var(--bg); }
+.statusBadge.status-completed { background: var(--success); color: var(--bg); }
+.statusBadge.status-failed { background: var(--danger); color: #fff; }
+
+/* ── Empty state ── */
+.historyTable-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 48px 32px;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.historyTable-emptyIcon {
+  margin-bottom: 16px;
+  opacity: 0.2;
+  color: var(--text-secondary);
+}
+
+.historyTable-emptyTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.historyTable-emptyHint {
+  margin-top: 8px;
+  font-size: 13px;
+  max-width: 300px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

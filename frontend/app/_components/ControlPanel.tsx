@@ -11,7 +11,7 @@ const CAM_CORNER_OPTIONS: { value: CamCorner; label: string }[] = [
   { value: "br", label: "Kanan Bawah" },
 ];
 
-type ControlPanelProps = {
+export type ControlPanelProps = {
   cropMode: CropMode;
   error: string;
   isBusy: boolean;
@@ -63,6 +63,8 @@ type ControlPanelProps = {
   onStartJob: () => void;
   onUrlChange: (value: string) => void;
   url: string;
+  name: string;
+  onNameChange: (value: string) => void;
 };
 
 export function ControlPanel({
@@ -117,6 +119,8 @@ export function ControlPanel({
   onStartJob,
   onUrlChange,
   url,
+  name,
+  onNameChange,
 }: ControlPanelProps) {
   const hasSource = sourceMode === "url" ? Boolean(url.trim()) : Boolean(uploadFileName);
   const isStartDisabled = isSubmitting || isBusy || isUploading || !hasSource;

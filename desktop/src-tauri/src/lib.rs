@@ -4,6 +4,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
+mod menu;
 
 struct BackendProcess {
     child: Mutex<Option<Child>>,
@@ -119,6 +120,9 @@ pub fn run() {
         .setup(|app| {
             if let Err(e) = spawn_backend(app) {
                 eprintln!("[tauri] Failed to start backend: {}", e);
+            }
+            if let Err(e) = menu::build_menu(app) {
+                eprintln!("[tauri] Failed to build menu: {}", e);
             }
             Ok(())
         })

@@ -1,0 +1,48 @@
+.desktopShell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.desktopShell-sidebar {
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+}
+
+.desktopShell-canvas {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: auto;
+  padding: 24px;
+}
+
+.desktopShell-statusbar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.desktopShell:not([data-sidebar="true"]) .desktopShell-canvas {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .desktopShell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .desktopShell-sidebar,
+  .desktopShell-canvas {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .desktopShell-statusbar {
+    grid-column: 1;
+  }
+}

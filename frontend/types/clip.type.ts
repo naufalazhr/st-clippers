@@ -41,6 +41,7 @@ export type ClipJob = {
   error: string | null;
   work_dir?: string | null;
   request: {
+    name: string;
     url: string;
     source_file?: string;
     top: number | null;
@@ -87,6 +88,7 @@ export type CreateClipJobInput = {
   ai_base_url?: string;
   ai_model?: string;
   ai_api_key?: string;
+  name?: string;
 };
 
 export type TranscriptSegment = {

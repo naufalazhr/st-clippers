@@ -46,6 +46,9 @@ export function HistoryTable({
   onViewChange,
 }: HistoryTableProps) {
   const [sort, setSort] = useState<SortState>({ key: "date", dir: -1 });
+  const [nameQuery, setNameQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const toggleSort = (key: SortKey) => {
     setSort((prev) =>
@@ -55,7 +58,21 @@ export function HistoryTable({
     );
   };
 
-  const sorted = [...jobs].sort((a, b) => {
+  const filtered = jobs.filter((item) => {
+    const name = item.request.name || item.request.url || item.id;
+    if (nameQuery && !name.toLowerCase().includes(nameQuery.toLowerCase())) {
+      return false;
+    }
+    if (dateFrom || dateTo) {
+      const d = new Date(item.created_at);
+      const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      if (dateFrom && localDate < dateFrom) return false;
+      if (dateTo && localDate > dateTo) return false;
+    }
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sort.key === "date") {
       return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * sort.dir;
     }
@@ -77,6 +94,7 @@ export function HistoryTable({
       <table className="historyTable">
         <thead>
           <tr>
+            <th>Nama</th>
             <th>Tanggal</th>
             <th>Sumber</th>
             <th>Status</th>
@@ -87,7 +105,7 @@ export function HistoryTable({
         <tbody>
           {Array.from({ length: 5 }, (_, i) => (
             <tr key={i}>
-              <td colSpan={5}>
+              <td colSpan={6}>
                 <div className="skeleton skeleton-row" style={{ animationDelay: `${i * 80}ms` }} />
               </td>
             </tr>
@@ -115,70 +133,95 @@ export function HistoryTable({
   }
 
   return (
-    <table className="historyTable">
-      <thead>
-        <tr>
-          <th>
-            <button
-              type="button"
-              className="historyTable-sortBtn"
-              onClick={() => toggleSort("date")}
-            >
-              Tanggal{sortIndicator("date")}
-            </button>
-          </th>
-          <th>Sumber</th>
-          <th>
-            <button
-              type="button"
-              className="historyTable-sortBtn"
-              onClick={() => toggleSort("status")}
-            >
-              Status{sortIndicator("status")}
-            </button>
-          </th>
-          <th>Klip</th>
-          <th className="historyTable-actionsCol">
-            <button
-              type="button"
-              className="iconButton dangerIconButton"
-              onClick={onDeleteAll}
-              title="Hapus Semua Riwayat"
-            >
-              <Trash2 size={16} />
-            </button>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((item) => {
-          const count = item.clips.length
-            ? `${item.clips.length} klip`
-            : `${item.candidates.length} kandidat`;
+    <>
+      <div className="historyTable-filters">
+        <input
+          type="text"
+          placeholder="Cari nama project…"
+          value={nameQuery}
+          onChange={(e) => setNameQuery(e.target.value)}
+        />
+        <label>
+          Dari
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </label>
+        <label>
+          Sampai
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </label>
+        {(nameQuery || dateFrom || dateTo) && (
+          <button type="button" className="iconButton" onClick={() => { setNameQuery(""); setDateFrom(""); setDateTo(""); }}>
+            Reset
+          </button>
+        )}
+      </div>
+      <table className="historyTable">
+        <thead>
+          <tr>
+            <th>Nama</th>
+            <th>
+              <button
+                type="button"
+                className="historyTable-sortBtn"
+                onClick={() => toggleSort("date")}
+              >
+                Tanggal{sortIndicator("date")}
+              </button>
+            </th>
+            <th>Sumber</th>
+            <th>
+              <button
+                type="button"
+                className="historyTable-sortBtn"
+                onClick={() => toggleSort("status")}
+              >
+                Status{sortIndicator("status")}
+              </button>
+            </th>
+            <th>Klip</th>
+            <th className="historyTable-actionsCol">
+              <button
+                type="button"
+                className="iconButton dangerIconButton"
+                onClick={onDeleteAll}
+                title="Hapus Semua Riwayat"
+              >
+                <Trash2 size={16} />
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((item) => {
+            const count = item.clips.length
+              ? `${item.clips.length} klip`
+              : `${item.candidates.length} kandidat`;
 
-          return (
-            <tr
-              key={item.id}
-              className="historyTable-row"
-              onClick={() => handleRowClick(item)}
-            >
-              <td className="timecode">{formatDate(item.created_at)}</td>
-              <td className="historyTable-source" title={item.request.url || item.id}>
-                {truncateUrl(item.request.url) || item.id}
-              </td>
-              <td>
-                <span className={`statusBadge status-${item.status}`}>
-                  {statusCopy[item.status]}
-                </span>
-              </td>
-              <td className="timecode">{count}</td>
-              <td className="historyTable-chevron">
-                <ChevronRight size={16} />
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+            return (
+              <tr
+                key={item.id}
+                className="historyTable-row"
+                onClick={() => handleRowClick(item)}
+              >
+                <td>{item.request.name || item.request.url || item.id}</td>
+                <td className="timecode">{formatDate(item.created_at)}</td>
+                <td className="historyTable-source" title={item.request.url || item.id}>
+                  {truncateUrl(item.request.url) || item.id}
+                </td>
+                <td>
+                  <span className={`statusBadge status-${item.status}`}>
+                    {statusCopy[item.status]}
+                  </span>
+                </td>
+                <td className="timecode">{count}</td>
+                <td className="historyTable-chevron">
+                  <ChevronRight size={16} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
   );
 }
