@@ -13,7 +13,7 @@ from math import ceil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -76,6 +76,7 @@ class ClipJobRequest(BaseModel):
     ai_base_url: str = ""
     ai_model: str = ""
     ai_api_key: str = ""
+    name: str = ""
 
     @field_validator("caption_color", "caption_outline_color")
     @classmethod
@@ -116,6 +117,7 @@ class ClipJob(BaseModel):
     clips: list[ClipFile] = []
     candidates: list[ClipCandidate] = []
     error: str | None = None
+    work_dir: str | None = None
 
 
 app = FastAPI(title="Sultan Clip API", version="0.1.0")
@@ -320,6 +322,14 @@ def choose_auto_analyze_seconds(duration: float | None) -> float | None:
     if not duration or duration <= FULL_ANALYSIS_LIMIT_SECONDS:
         return None
     return min(MAX_AUTO_ANALYSIS_SECONDS, max(FULL_ANALYSIS_LIMIT_SECONDS, duration * LONG_VIDEO_ANALYSIS_RATIO))
+
+
+def default_job_name(url: str, has_upload: bool) -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    if has_upload or not url:
+        return f"Upload {stamp}" if has_upload else f"Clip {stamp}"
+    host = urlparse(url).hostname
+    return f"{host} {stamp}" if host else f"Clip {stamp}"
 
 
 def normalize_job_request(request: ClipJobRequest) -> ClipJobRequest:
@@ -565,6 +575,10 @@ def create_job(request: ClipJobRequest) -> ClipJob:
         request = request.model_copy(update={"source_file": str(upload_path)})
 
     request = normalize_job_request(request)
+    if not request.name.strip():
+        request = request.model_copy(
+            update={"name": default_job_name(request.url, bool(request.source_file))}
+        )
     job_id = uuid.uuid4().hex
 
     # Keep the API key out of persisted state and API responses.

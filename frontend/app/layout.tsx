@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
-const inter = Inter({
+const geist = Geist({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-sans",
+});
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
@@ -35,7 +39,7 @@ export default function RootLayout({
           })();
         `}} />
       </head>
-      <body className={`${inter.variable}`}>
+      <body className={`${geist.variable} ${geistMono.variable}`}>
         {children}
         <Toaster
           position="top-center"
@@ -43,6 +47,7 @@ export default function RootLayout({
           toastOptions={{
             duration: 3600,
             style: {
+              background: "var(--bg-soft)",
               border: "1px solid var(--border)",
               borderRadius: "12px",
               boxShadow: "var(--shadow-md)",
@@ -50,6 +55,18 @@ export default function RootLayout({
               fontSize: "14px",
               fontWeight: 500,
               padding: "12px 14px",
+            },
+            success: {
+              iconTheme: {
+                primary: "var(--success)",
+                secondary: "var(--bg-soft)",
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: "var(--danger)",
+                secondary: "var(--bg-soft)",
+              },
             },
           }}
         />
