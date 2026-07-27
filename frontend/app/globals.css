@@ -863,6 +863,153 @@ a {
   border-color: rgba(212,160,23,0.3);
 }
 
+/* ── Timeline Editor ── */
+.timelineEditor {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.timelineHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.timelineHeader h4 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--primary);
+}
+
+.timelineCodes {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.timelineVideo {
+  width: 100%;
+  max-height: 120px;
+  border-radius: var(--radius-sm);
+  background: #000;
+  margin-bottom: 10px;
+}
+
+.timelineTrack {
+  position: relative;
+  height: 40px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.timelineTick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(212,160,23,0.08);
+  border-right: 1px solid rgba(212,160,23,0.15);
+  pointer-events: none;
+}
+
+.timelineRange {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(212,160,23,0.15);
+  pointer-events: none;
+}
+
+.timelineHandle {
+  position: absolute;
+  top: 0;
+  width: 24px;
+  height: 100%;
+  z-index: 10;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.timelineHandleEnd {
+  cursor: ew-resize;
+}
+
+.timelineHandleLine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--primary);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.timelineHandleKnob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  color: var(--primary);
+  background: var(--bg);
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  padding: 0 3px;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+.timelineActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.timelineBtn {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.timelineBtn:hover:not(:disabled) {
+  background: var(--panel-hover);
+  color: var(--text-primary);
+}
+
+.timelineBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.timelineBtnPrimary {
+  background: linear-gradient(135deg, #F0C040, #D4A017);
+  color: #0A0A0A;
+  border: none;
+}
+
+.timelineBtnPrimary:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(212,160,23,0.3);
+}
+
 /* ── Scroll entry animation (used by IntersectionObserver) ── */
 .reveal {
   opacity: 0;
