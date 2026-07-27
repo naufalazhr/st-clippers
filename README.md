@@ -19,6 +19,8 @@ Sultan Clip downloads a YouTube video, transcribes it locally with `faster-whisp
 - ✂️ **Face-aware crop** — person detection keeps the subject framed  
 - 🎨 **Custom captions** — font, size, colour, outline, position  
 - 🤖 **AI captions** — optional OpenAI-compatible integration  
+- ✂️ **Timeline trim** — adjust clip in/out points visually, snap to
+  transcript sentences, re-export without re-transcribing  
 - 🐳 **Dockerised** — one command to run the full stack  
 
 ---
@@ -142,6 +144,8 @@ python clipper.py "https://youtu.be/VIDEO_ID" \
 | `GET` | `/api/probe` | Get YouTube video duration |
 | `POST` | `/api/models` | List LLM models |
 | `GET` | `/outputs/{path}` | Serve clip files |
+| `GET` | `/api/jobs/{id}/timeline` | Timeline data for trim editor (source URL, segments, candidates) |
+| `POST` | `/api/jobs/{id}/recut` | Recut a clip with new `{index, start, end}` — returns updated clip + candidate |
 
 ### Job states
 
@@ -209,7 +213,7 @@ For remote servers, point `NEXT_PUBLIC_API_BASE` to the public backend URL.
 
 - **First run** downloads Whisper model (~500 MB) and YuNet ONNX (~230 KB). Cached locally afterward.
 - **GPU** is used automatically if CUDA is available in Docker.
-- **Disk usage** — each job stores source video, audio, transcript, and clips under `backend/outputs/`. Clean up with `DELETE /api/jobs`.
+- **Disk usage** — each job stores source video, audio, transcript, and clips under `backend/outputs/`. Clean up with `DELETE /api/jobs`. The source video is now retained after export (to support the timeline trim editor); cleaned up via the same `DELETE /api/jobs` endpoint. Upload-source jobs do not get the editor (the upload is deleted right after processing).
 - Only process content you own or have rights to use. Follow YouTube Terms of Service.
 
 ---
