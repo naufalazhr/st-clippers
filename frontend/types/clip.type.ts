@@ -39,8 +39,10 @@ export type ClipJob = {
   clips: ClipFile[];
   candidates: ClipCandidate[];
   error: string | null;
+  work_dir?: string | null;
   request: {
     url: string;
+    source_file?: string;
     top: number | null;
     min_duration: number;
     max_duration: number;
@@ -85,4 +87,17 @@ export type CreateClipJobInput = {
   ai_base_url?: string;
   ai_model?: string;
   ai_api_key?: string;
+};
+
+export type TranscriptSegment = {
+  start: number;
+  end: number;
+  text: string;
+};
+
+export type TimelineData = {
+  source_url: string;
+  duration: number;
+  segments: TranscriptSegment[];
+  candidates: ClipCandidate[];
 };

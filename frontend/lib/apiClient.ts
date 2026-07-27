@@ -1,4 +1,4 @@
-import type { ClipJob, CreateClipJobInput } from "../types/clip.type";
+import type { ClipJob, CreateClipJobInput, TimelineData, ClipFile, ClipCandidate } from "../types/clip.type";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8010";
 const CLIENT_API_BASE = API_BASE;
@@ -100,3 +100,24 @@ export const fetchModelStatus = async () => {
 };
 
 export const getOutputUrl = (path: string) => `${API_BASE}${path}`;
+
+export type RecutResponse = {
+  clip: ClipFile;
+  candidate: ClipCandidate;
+};
+
+export const getTimeline = async (jobId: string): Promise<TimelineData> => {
+  const response = await fetch(`${CLIENT_API_BASE}/api/jobs/${jobId}/timeline`, { cache: "no-store" });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<TimelineData>;
+};
+
+export const recutClip = async (jobId: string, body: { index: number; start: number; end: number }): Promise<RecutResponse> => {
+  const response = await fetch(`${CLIENT_API_BASE}/api/jobs/${jobId}/recut`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<RecutResponse>;
+};
