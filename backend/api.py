@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import uuid
 from math import ceil
 from datetime import datetime, timezone
@@ -507,81 +508,102 @@ def build_clipper_command(request: ClipJobRequest) -> list[str]:
     return command
 
 
-def run_job(job_id: str) -> None:
+def append_log(job_id: str, message: str) -> None:
     with jobs_lock:
-        request = jobs[job_id].request
+        if job_id in jobs:
+            job = jobs[job_id]
+            job.logs = (job.logs + [message])[-120:]
+            save_jobs_unlocked()
 
-    secret = job_secrets.get(job_id)
-    if secret:
-        request = request.model_copy(update={"ai_api_key": secret})
 
-    started_at = time.time()
-    set_job(job_id, status="running", error=None)
-    command = build_clipper_command(request)
+def run_job(job_id: str) -> None:
+    try:
+        with jobs_lock:
+            request = jobs[job_id].request
 
-    if getattr(sys, "frozen", False):
+        secret = job_secrets.get(job_id)
+        if secret:
+            request = request.model_copy(update={"ai_api_key": secret})
+
+        started_at = time.time()
+        set_job(job_id, status="running", error=None)
+        command = build_clipper_command(request)
+        append_log(job_id, f"Command: {' '.join(command)}")
+        print(f"[job {job_id}] Command: {' '.join(command)}", flush=True)
+
         env = os.environ.copy()
-        env.setdefault("SULTANCLIP_DATA_DIR", str(resolve_data_dir()))
-        env["PYTHONNOUSERSITE"] = "1"
-        popen_env = env
-        popen_cwd = resolve_data_dir()
-    else:
-        popen_env = None
-        popen_cwd = BASE_DIR
+        env["PYTHONUNBUFFERED"] = "1"
+        if getattr(sys, "frozen", False):
+            env.setdefault("SULTANCLIP_DATA_DIR", str(resolve_data_dir()))
+            env["PYTHONNOUSERSITE"] = "1"
+            popen_cwd = resolve_data_dir()
+        else:
+            popen_cwd = BASE_DIR
 
-    process = subprocess.Popen(
-        command,
-        cwd=popen_cwd,
-        env=popen_env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-    )
+        append_log(job_id, "Starting pipeline...")
 
-    logs: list[str] = []
-    assert process.stdout is not None
-    for line in process.stdout:
-        cleaned = line.rstrip()
-        if cleaned:
-            logs.append(cleaned)
-            set_job(job_id, logs=logs[-120:])
-
-    code = process.wait()
-    clips = discover_clips(started_at)
-    candidates = discover_candidates(started_at)
-    if code == 0:
-        work_dir = discover_work_dir(started_at)
-        updates = {"status": "completed", "logs": logs[-120:]}
-        if work_dir:
-            updates["work_dir"] = work_dir
-        if clips:
-            updates["clips"] = clips
-        if candidates:
-            updates["candidates"] = candidates
-        set_job(job_id, **updates)
-    else:
-        set_job(
-            job_id,
-            status="failed",
-            clips=clips,
-            candidates=candidates,
-            logs=logs[-120:],
-            error=f"clipper.py exited with code {code}",
+        process = subprocess.Popen(
+            command,
+            cwd=popen_cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
-    job_secrets.pop(job_id, None)
 
-    # An uploaded source is only needed during processing; remove it afterwards
-    # so large videos don't accumulate in uploads/.
-    if request.source_file:
-        upload_path = resolve_upload_path(request.source_file)
-        if upload_path is not None:
-            try:
-                upload_path.unlink()
-            except OSError:
-                pass
+        append_log(job_id, f"Pipeline started (PID: {process.pid})")
+
+        logs: list[str] = []
+        assert process.stdout is not None
+        for line in process.stdout:
+            cleaned = line.rstrip()
+            if cleaned:
+                logs.append(cleaned)
+                set_job(job_id, logs=logs[-120:])
+
+        code = process.wait()
+        append_log(job_id, f"Pipeline exited (code: {code})")
+        clips = discover_clips(started_at)
+        candidates = discover_candidates(started_at)
+        if code == 0:
+            work_dir = discover_work_dir(started_at)
+            updates = {"status": "completed", "logs": logs[-120:]}
+            if work_dir:
+                updates["work_dir"] = work_dir
+            if clips:
+                updates["clips"] = clips
+            if candidates:
+                updates["candidates"] = candidates
+            set_job(job_id, **updates)
+        else:
+            set_job(
+                job_id,
+                status="failed",
+                clips=clips,
+                candidates=candidates,
+                logs=logs[-120:],
+                error=f"clipper.py exited with code {code}",
+            )
+        job_secrets.pop(job_id, None)
+
+        # An uploaded source is only needed during processing; remove it afterwards
+        # so large videos don't accumulate in uploads/.
+        if request.source_file:
+            upload_path = resolve_upload_path(request.source_file)
+            if upload_path is not None:
+                try:
+                    upload_path.unlink()
+                except OSError:
+                    pass
+    except Exception as exc:
+        tb = traceback.format_exc()
+        append_log(job_id, f"Pipeline crashed: {exc}")
+        append_log(job_id, f"Traceback: {tb}")
+        set_job(job_id, status="failed", error=f"Pipeline gagal: {exc}")
+        job_secrets.pop(job_id, None)
 
 
 @app.get("/api/model-status")
@@ -697,6 +719,7 @@ def create_job(request: ClipJobRequest) -> ClipJob:
         request=request,
         created_at=now_iso(),
         updated_at=now_iso(),
+        logs=["🔄 Menyiapkan pipeline..."],
     )
     with jobs_lock:
         jobs[job_id] = job
@@ -725,6 +748,19 @@ def delete_all_jobs() -> dict[str, str | int]:
         removed_outputs = clear_outputs_dir()
         clear_uploads_dir()
     return {"status": "ok", "removed_outputs": removed_outputs}
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str) -> dict[str, str]:
+    with jobs_lock:
+        job = jobs.pop(job_id, None)
+        job_secrets.pop(job_id, None)
+        save_jobs_unlocked()
+    if job and job.work_dir:
+        work_path = OUTPUTS_DIR / job.work_dir
+        if work_path.exists():
+            shutil.rmtree(work_path, ignore_errors=True)
+    return {"status": "ok"}
 
 
 @app.get("/api/jobs/{job_id}", response_model=ClipJob)

@@ -1,0 +1,108 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - navigation [ref=e3]:
+      - heading "Sultan Clip" [level=1] [ref=e5]
+      - generic [ref=e6]:
+        - button "Toggle theme" [ref=e7] [cursor=pointer]
+        - button "Refresh data" [ref=e10] [cursor=pointer]
+    - generic [ref=e16]:
+      - generic [ref=e19]:
+        - heading "Potong Video" [level=2] [ref=e27]
+        - generic [ref=e28]:
+          - generic [ref=e29]: Sumber Video
+          - group "Sumber video" [ref=e30]:
+            - button "Link YouTube" [ref=e31] [cursor=pointer]
+            - button "Upload Video" [ref=e35] [cursor=pointer]
+        - generic [ref=e39]:
+          - generic [ref=e40]: Link Video YouTube
+          - textbox "Link Video YouTube Pastikan video memiliki percakapan yang jelas untuk hasil transkripsi terbaik." [ref=e41]:
+            - /placeholder: https://www.youtube.com/watch?v=...
+          - paragraph [ref=e42]: Pastikan video memiliki percakapan yang jelas untuk hasil transkripsi terbaik.
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - generic [ref=e45]: Durasi Minimum
+            - spinbutton "Durasi Minimum" [ref=e46]: "35"
+          - generic [ref=e47]:
+            - generic [ref=e48]: Durasi Maksimum
+            - spinbutton "Durasi Maksimum" [ref=e49]: "180"
+        - generic [ref=e50]:
+          - generic [ref=e51]: Target Jumlah Clip
+          - spinbutton "Target Jumlah Clip Kosongkan untuk otomatis. Akan disesuaikan dengan panjang video." [ref=e52]
+          - paragraph [ref=e53]: Kosongkan untuk otomatis. Akan disesuaikan dengan panjang video.
+        - generic [ref=e54]:
+          - generic [ref=e55]: Mode Crop
+          - group "Mode crop video" [ref=e56]:
+            - button "Center" [ref=e57] [cursor=pointer]
+            - button "Follow Person" [ref=e58] [cursor=pointer]
+            - button "Streamer" [ref=e59] [cursor=pointer]
+        - generic [ref=e60]:
+          - generic [ref=e61] [cursor=pointer]:
+            - generic [ref=e62]: Caption Otomatis
+            - checkbox "Caption Otomatis" [checked] [ref=e65]
+          - paragraph [ref=e66]: Tempelkan teks transkrip langsung ke dalam video.
+          - generic [ref=e67]:
+            - generic [ref=e68]:
+              - generic [ref=e69]:
+                - generic [ref=e70]:
+                  - text: "Ukuran Font:"
+                  - strong [ref=e71]: "30"
+                - slider "Ukuran font caption" [ref=e72] [cursor=pointer]: "30"
+                - generic [ref=e73]:
+                  - generic [ref=e74]: Kecil
+                  - generic [ref=e75]: Sedang
+                  - generic [ref=e76]: Besar
+              - generic [ref=e77]:
+                - generic [ref=e78]: Posisi
+                - group "Posisi caption" [ref=e79]:
+                  - button "Tengah" [ref=e80] [cursor=pointer]
+                  - button "Bawah" [ref=e81] [cursor=pointer]
+              - generic [ref=e82]:
+                - generic [ref=e83]: Jenis Font
+                - combobox "Jenis Font" [ref=e84]:
+                  - option "DejaVu Sans" [selected]
+                  - option "DejaVu Serif"
+                  - option "Liberation Sans"
+                  - option "Liberation Serif"
+                  - option "Noto Sans"
+              - generic [ref=e85]:
+                - generic [ref=e86]:
+                  - generic [ref=e87]: Warna Teks
+                  - textbox "Warna Teks" [ref=e88] [cursor=pointer]: "#ffffff"
+                - generic [ref=e89]:
+                  - generic [ref=e90]: Warna Border
+                  - textbox "Warna Border" [ref=e91] [cursor=pointer]: "#000000"
+              - generic [ref=e92]:
+                - generic [ref=e93]:
+                  - text: "Tebal Border:"
+                  - strong [ref=e94]: "2"
+                - slider "Tebal border caption" [ref=e95] [cursor=pointer]: "2"
+                - generic [ref=e96]:
+                  - generic [ref=e97]: Tanpa
+                  - generic [ref=e98]: Tebal
+            - generic [ref=e99]:
+              - generic [ref=e100]: Preview
+              - generic [ref=e101]: Contoh caption di video kamu
+        - generic [ref=e103]:
+          - generic [ref=e104] [cursor=pointer]:
+            - generic [ref=e105]: AI Agent Pemilih Klip
+            - checkbox "AI Agent Pemilih Klip" [ref=e109]
+          - paragraph [ref=e110]: LLM menilai setiap kandidat dan memilih bagian paling kuat untuk dijadikan klip.
+        - button [disabled] [ref=e111]
+      - generic [ref=e117]:
+        - heading "Aktivitas" [level=2] [ref=e121]
+        - generic [ref=e122]:
+          - paragraph [ref=e125]: Belum ada proses berjalan.
+          - paragraph [ref=e126]:
+            - text: Masukkan link YouTube, lalu klik
+            - strong [ref=e127]: Mulai Potong Video
+            - text: untuk memulai.
+    - generic [ref=e130]:
+      - generic [ref=e131]:
+        - heading "Klip Siap Digunakan" [level=2] [ref=e132]
+        - generic [ref=e133]: 0 klip siap
+      - paragraph [ref=e138]: Klip vertikal 9:16 yang selesai diproses akan muncul di sini.
+    - generic [ref=e142]:
+      - heading "Riwayat Proses" [level=2] [ref=e143]
+      - generic [ref=e144]: 0 total
+    - paragraph [ref=e147]: © 2026 Sultan Clip
+  - alert [ref=e148]

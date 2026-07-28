@@ -1,5 +1,77 @@
 .inspectorPanel {
+  display: grid;
+  grid-template-columns: 560px 1fr;
+  gap: 24px;
+  align-items: start;
+  height: 100%;
+}
+
+.inspectorPanel-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+}
+
+.inspectorPanel-preview {
+  position: sticky;
+  top: 0;
+  padding-top: 4px;
+}
+
+.collapseGroup {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.collapseGroup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.collapseGroup-header:hover {
+  background: var(--panel-hover);
+}
+
+.collapseGroup-chevron {
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.collapseGroup[data-open="true"] .collapseGroup-chevron {
+  transform: rotate(90deg);
+  color: var(--primary);
+}
+
+.collapseGroup-body {
+  display: none;
+}
+
+.collapseGroup[data-open="true"] .collapseGroup-body {
+  display: block;
+}
+
+.collapseGroup-inner {
+  padding: 4px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.inspectorFooter {
+  position: sticky;
+  bottom: 0;
+  padding-top: 8px;
 }

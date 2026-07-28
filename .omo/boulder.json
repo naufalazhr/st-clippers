@@ -1,39 +1,117 @@
 {
   "schema_version": 2,
-  "active_work_id": "sultan-clip-rebrand-d1a6ab67",
+  "active_work_id": "ui-polish-f9116f9b",
   "works": {
-    "sultan-clip-rebrand-d1a6ab67": {
-      "work_id": "sultan-clip-rebrand-d1a6ab67",
-      "active_plan": "/Users/naufal/Documents/Sultan Tech/ST Clippers/.omo/plans/sultan-clip-rebrand.md",
-      "plan_name": "sultan-clip-rebrand",
+    "fix-pipeline-stuck-aceaad03": {
+      "work_id": "fix-pipeline-stuck-aceaad03",
+      "active_plan": "/Users/naufal/Documents/Sultan Tech/ST Clippers/.omo/plans/fix-pipeline-stuck.md",
+      "plan_name": "fix-pipeline-stuck",
       "status": "completed",
-      "started_at": "2026-07-20T06:02:01.253Z",
-      "updated_at": "2026-07-20T07:33:23.924Z",
+      "started_at": "2026-07-27T05:41:53.610Z",
+      "updated_at": "2026-07-27T06:13:12.560Z",
       "session_ids": [
-        "opencode:ses_082be4350ffebudHX8eyFk6hGF"
+        "opencode:ses_05ef0b94effePNQb1TLFpldGkl",
+        "opencode:ses_05dd0a99cffejc5linseL4z9Cn"
       ],
       "session_origins": {
-        "opencode:ses_082be4350ffebudHX8eyFk6hGF": "direct"
+        "opencode:ses_05ef0b94effePNQb1TLFpldGkl": "direct",
+        "opencode:ses_05dd0a99cffejc5linseL4z9Cn": "appended"
       },
       "agent": "atlas",
-      "task_sessions": {},
-      "ended_at": "2026-07-20T07:33:23.924Z",
-      "elapsed_ms": 5482671
+      "task_sessions": {
+        "todo:1": {
+          "task_key": "todo:1",
+          "task_label": "1",
+          "task_title": "**B1 — Fix `run_job`: unbuffered subprocess output + error handling**",
+          "session_id": "opencode:ses_05dd0a99cffejc5linseL4z9Cn",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-low",
+          "started_at": "2026-07-27T06:01:48.121Z",
+          "status": "completed",
+          "updated_at": "2026-07-27T06:12:58.555Z",
+          "ended_at": "2026-07-27T06:12:58.555Z",
+          "elapsed_ms": 670434
+        }
+      },
+      "ended_at": "2026-07-27T06:13:12.560Z",
+      "elapsed_ms": 1878950
+    },
+    "ui-polish-f9116f9b": {
+      "work_id": "ui-polish-f9116f9b",
+      "active_plan": "/Users/naufal/Documents/Sultan Tech/ST Clippers/.omo/plans/ui-polish.md",
+      "plan_name": "ui-polish",
+      "status": "completed",
+      "started_at": "2026-07-27T06:14:33.313Z",
+      "updated_at": "2026-07-27T07:44:52.774Z",
+      "session_ids": [
+        "opencode:ses_05ef0b94effePNQb1TLFpldGkl",
+        "opencode:ses_05dc93b34ffeUb6jIJ68NFU6Z8",
+        "opencode:ses_05dc92cc5ffeE6HVQ6XfLv8mXO",
+        "opencode:ses_05dc91442ffeI769asx7UVPdyU",
+        "opencode:ses_05dc8f02cffeKHlUIpDA5w3g4p",
+        "opencode:ses_05dc8d0ebffeHkN5FQGhSUEUr7"
+      ],
+      "session_origins": {
+        "opencode:ses_05ef0b94effePNQb1TLFpldGkl": "direct",
+        "opencode:ses_05dc93b34ffeUb6jIJ68NFU6Z8": "appended",
+        "opencode:ses_05dc92cc5ffeE6HVQ6XfLv8mXO": "appended",
+        "opencode:ses_05dc91442ffeI769asx7UVPdyU": "appended",
+        "opencode:ses_05dc8f02cffeKHlUIpDA5w3g4p": "appended",
+        "opencode:ses_05dc8d0ebffeHkN5FQGhSUEUr7": "appended"
+      },
+      "agent": "atlas",
+      "task_sessions": {
+        "todo:1": {
+          "task_key": "todo:1",
+          "task_label": "1",
+          "task_title": "**P1 — Fix font wiring (Geist + Geist Mono)** (Wave 1)",
+          "session_id": "opencode:ses_05dc8d0ebffeHkN5FQGhSUEUr7",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-07-27T07:41:53.707Z",
+          "ended_at": "2026-07-27T07:41:53.707Z",
+          "status": "completed"
+        }
+      },
+      "ended_at": "2026-07-27T07:44:52.774Z",
+      "elapsed_ms": 5419461
     }
   },
-  "active_plan": "/Users/naufal/Documents/Sultan Tech/ST Clippers/.omo/plans/sultan-clip-rebrand.md",
-  "started_at": "2026-07-20T06:02:01.253Z",
+  "active_plan": "/Users/naufal/Documents/Sultan Tech/ST Clippers/.omo/plans/ui-polish.md",
+  "started_at": "2026-07-27T06:14:33.313Z",
   "status": "completed",
-  "updated_at": "2026-07-20T07:33:23.924Z",
+  "updated_at": "2026-07-27T07:44:52.774Z",
   "session_ids": [
-    "opencode:ses_082be4350ffebudHX8eyFk6hGF"
+    "opencode:ses_05ef0b94effePNQb1TLFpldGkl",
+    "opencode:ses_05dc93b34ffeUb6jIJ68NFU6Z8",
+    "opencode:ses_05dc92cc5ffeE6HVQ6XfLv8mXO",
+    "opencode:ses_05dc91442ffeI769asx7UVPdyU",
+    "opencode:ses_05dc8f02cffeKHlUIpDA5w3g4p",
+    "opencode:ses_05dc8d0ebffeHkN5FQGhSUEUr7"
   ],
   "session_origins": {
-    "opencode:ses_082be4350ffebudHX8eyFk6hGF": "direct"
+    "opencode:ses_05ef0b94effePNQb1TLFpldGkl": "direct",
+    "opencode:ses_05dc93b34ffeUb6jIJ68NFU6Z8": "appended",
+    "opencode:ses_05dc92cc5ffeE6HVQ6XfLv8mXO": "appended",
+    "opencode:ses_05dc91442ffeI769asx7UVPdyU": "appended",
+    "opencode:ses_05dc8f02cffeKHlUIpDA5w3g4p": "appended",
+    "opencode:ses_05dc8d0ebffeHkN5FQGhSUEUr7": "appended"
   },
-  "plan_name": "sultan-clip-rebrand",
-  "task_sessions": {},
+  "plan_name": "ui-polish",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "**P1 — Fix font wiring (Geist + Geist Mono)** (Wave 1)",
+      "session_id": "opencode:ses_05dc8d0ebffeHkN5FQGhSUEUr7",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-07-27T07:41:53.707Z",
+      "ended_at": "2026-07-27T07:41:53.707Z",
+      "status": "completed"
+    }
+  },
   "agent": "atlas",
-  "ended_at": "2026-07-20T07:33:23.924Z",
-  "elapsed_ms": 5482671
+  "ended_at": "2026-07-27T07:44:52.774Z",
+  "elapsed_ms": 5419461
 }

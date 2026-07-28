@@ -2,6 +2,7 @@
 
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { CaptionPreview } from "../CaptionPreview";
 import type { ControlPanelProps } from "../ControlPanel";
 import { AiSection } from "../sections/AiSection";
 import { CropCaptionSection } from "../sections/CropCaptionSection";
@@ -34,82 +35,95 @@ export function InspectorPanel(props: ControlPanelProps) {
 
   return (
     <aside className="inspectorPanel">
-      <CollapseGroup title="Sumber Video" defaultOpen={true}>
-        <SourceSection
-          sourceMode={props.sourceMode}
-          uploadFileName={props.uploadFileName}
-          uploadPreviewUrl={props.uploadPreviewUrl}
-          isUploading={props.isUploading}
-          url={props.url}
-          name={props.name}
-          onNameChange={props.onNameChange}
-          onSourceModeChange={props.onSourceModeChange}
-          onUploadFileChange={props.onUploadFileChange}
-          onUrlChange={props.onUrlChange}
-        />
-      </CollapseGroup>
+      <div className="inspectorPanel-form">
+        <CollapseGroup title="Sumber Video" defaultOpen={true}>
+          <SourceSection
+            sourceMode={props.sourceMode}
+            uploadFileName={props.uploadFileName}
+            uploadPreviewUrl={props.uploadPreviewUrl}
+            isUploading={props.isUploading}
+            url={props.url}
+            name={props.name}
+            onNameChange={props.onNameChange}
+            onSourceModeChange={props.onSourceModeChange}
+            onUploadFileChange={props.onUploadFileChange}
+            onUrlChange={props.onUrlChange}
+          />
+        </CollapseGroup>
 
-      <CollapseGroup title="Durasi & Klip" defaultOpen={true}>
-        <RangeSection
-          maxDuration={props.maxDuration}
-          minDuration={props.minDuration}
-          targetClips={props.targetClips}
-          maxClips={props.maxClips}
-          videoDuration={props.videoDuration}
-          onTargetClipsChange={props.onTargetClipsChange}
-          onMaxDurationChange={props.onMaxDurationChange}
-          onMinDurationChange={props.onMinDurationChange}
-        />
-      </CollapseGroup>
+        <CollapseGroup title="Durasi & Klip" defaultOpen={true}>
+          <RangeSection
+            maxDuration={props.maxDuration}
+            minDuration={props.minDuration}
+            targetClips={props.targetClips}
+            maxClips={props.maxClips}
+            videoDuration={props.videoDuration}
+            onTargetClipsChange={props.onTargetClipsChange}
+            onMaxDurationChange={props.onMaxDurationChange}
+            onMinDurationChange={props.onMinDurationChange}
+          />
+        </CollapseGroup>
 
-      <CollapseGroup title="Crop & Tampilan" defaultOpen={false}>
-        <CropCaptionSection
-          cropMode={props.cropMode}
-          camCorner={props.camCorner}
-          burnSubtitles={props.burnSubtitles}
-          captionFontSize={props.captionFontSize}
-          captionPosition={props.captionPosition}
-          captionColor={props.captionColor}
-          captionFont={props.captionFont}
-          captionOutline={props.captionOutline}
-          captionOutlineColor={props.captionOutlineColor}
-          onCropModeChange={props.onCropModeChange}
-          onCamCornerChange={props.onCamCornerChange}
-          onBurnSubtitlesChange={props.onBurnSubtitlesChange}
-          onCaptionFontSizeChange={props.onCaptionFontSizeChange}
-          onCaptionPositionChange={props.onCaptionPositionChange}
-          onCaptionColorChange={props.onCaptionColorChange}
-          onCaptionFontChange={props.onCaptionFontChange}
-          onCaptionOutlineChange={props.onCaptionOutlineChange}
-          onCaptionOutlineColorChange={props.onCaptionOutlineColorChange}
-        />
-      </CollapseGroup>
+        <CollapseGroup title="Crop & Tampilan" defaultOpen={false}>
+          <CropCaptionSection
+            cropMode={props.cropMode}
+            camCorner={props.camCorner}
+            burnSubtitles={props.burnSubtitles}
+            captionFontSize={props.captionFontSize}
+            captionPosition={props.captionPosition}
+            captionColor={props.captionColor}
+            captionFont={props.captionFont}
+            captionOutline={props.captionOutline}
+            captionOutlineColor={props.captionOutlineColor}
+            onCropModeChange={props.onCropModeChange}
+            onCamCornerChange={props.onCamCornerChange}
+            onBurnSubtitlesChange={props.onBurnSubtitlesChange}
+            onCaptionFontSizeChange={props.onCaptionFontSizeChange}
+            onCaptionPositionChange={props.onCaptionPositionChange}
+            onCaptionColorChange={props.onCaptionColorChange}
+            onCaptionFontChange={props.onCaptionFontChange}
+            onCaptionOutlineChange={props.onCaptionOutlineChange}
+            onCaptionOutlineColorChange={props.onCaptionOutlineColorChange}
+          />
+        </CollapseGroup>
 
-      <CollapseGroup title="AI" defaultOpen={false}>
-        <AiSection
-          aiEnabled={props.aiEnabled}
-          aiBaseUrl={props.aiBaseUrl}
-          aiModel={props.aiModel}
-          aiApiKey={props.aiApiKey}
-          aiModels={props.aiModels}
-          isLoadingModels={props.isLoadingModels}
-          onLoadModels={props.onLoadModels}
-          onAiEnabledChange={props.onAiEnabledChange}
-          onAiBaseUrlChange={props.onAiBaseUrlChange}
-          onAiModelChange={props.onAiModelChange}
-          onAiApiKeyChange={props.onAiApiKeyChange}
-        />
-      </CollapseGroup>
+        <CollapseGroup title="AI" defaultOpen={false}>
+          <AiSection
+            aiEnabled={props.aiEnabled}
+            aiBaseUrl={props.aiBaseUrl}
+            aiModel={props.aiModel}
+            aiApiKey={props.aiApiKey}
+            aiModels={props.aiModels}
+            isLoadingModels={props.isLoadingModels}
+            onLoadModels={props.onLoadModels}
+            onAiEnabledChange={props.onAiEnabledChange}
+            onAiBaseUrlChange={props.onAiBaseUrlChange}
+            onAiModelChange={props.onAiModelChange}
+            onAiApiKeyChange={props.onAiApiKeyChange}
+          />
+        </CollapseGroup>
 
-      <CollapseGroup title="Hashtag" defaultOpen={false}>
-        <HashtagsSection
-          requiredHashtags={props.requiredHashtags}
-          onRequiredHashtagsChange={props.onRequiredHashtagsChange}
-        />
-      </CollapseGroup>
+        <CollapseGroup title="Hashtag" defaultOpen={false}>
+          <HashtagsSection
+            requiredHashtags={props.requiredHashtags}
+            onRequiredHashtagsChange={props.onRequiredHashtagsChange}
+          />
+        </CollapseGroup>
 
-      <div className="inspectorFooter">
-        <JobFooter error={props.error} isStartDisabled={isStartDisabled} isProcessing={isProcessing} onStartJob={props.onStartJob} />
+        <div className="inspectorFooter">
+          <JobFooter error={props.error} isStartDisabled={isStartDisabled} isProcessing={isProcessing} onStartJob={props.onStartJob} />
+        </div>
+      </div>
+
+      <div className="inspectorPanel-preview">
+        <CaptionPreview
+          fontSize={props.captionFontSize}
+          position={props.captionPosition}
+          color={props.captionColor}
+          font={props.captionFont}
+          outline={props.captionOutline}
+          outlineColor={props.captionOutlineColor}
+        />
       </div>
     </aside>
   );

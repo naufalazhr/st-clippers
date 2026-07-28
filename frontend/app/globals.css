@@ -544,7 +544,8 @@ a {
 
 .logBox p {
   color: #A1A1AA;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 13px;
   line-height: 1.6;
   margin-bottom: 4px;
@@ -831,6 +832,14 @@ a {
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.timecode {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Wordmark (gold gradient text) ── */
 .wordmark {
   background: linear-gradient(135deg, #F0C040, #D4A017, #B8860B);
@@ -888,7 +897,8 @@ a {
 }
 
 .timelineCodes {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;

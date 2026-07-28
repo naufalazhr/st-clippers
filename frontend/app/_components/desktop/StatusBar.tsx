@@ -70,6 +70,9 @@ export function StatusBar({
 
   return (
     <div className="statusBar">
+      {job && (job.status === "running" || job.status === "queued") && (
+        <div className="statusBar-progress" />
+      )}
       <div className="statusBar-log"><LogTail logs={logs} /></div>
 
       <div className="statusBar-strip">

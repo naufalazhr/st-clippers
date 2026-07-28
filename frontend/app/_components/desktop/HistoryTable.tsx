@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, History, Trash2 } from "lucide-react";
+import { History, Trash2 } from "lucide-react";
 import { statusCopy } from "../../../lib/constants";
 import type { ClipJob } from "../../../types/clip.type";
 import "./HistoryTable.css";
@@ -21,6 +21,7 @@ interface HistoryTableProps {
   loading?: boolean;
   onSelectJob: (job: ClipJob) => void;
   onDeleteAll: () => void;
+  onDeleteJob: (jobId: string) => void;
   onViewChange: (v: "clip") => void;
 }
 
@@ -43,6 +44,7 @@ export function HistoryTable({
   loading,
   onSelectJob,
   onDeleteAll,
+  onDeleteJob,
   onViewChange,
 }: HistoryTableProps) {
   const [sort, setSort] = useState<SortState>({ key: "date", dir: -1 });
@@ -150,7 +152,7 @@ export function HistoryTable({
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
         {(nameQuery || dateFrom || dateTo) && (
-          <button type="button" className="iconButton" onClick={() => { setNameQuery(""); setDateFrom(""); setDateTo(""); }}>
+          <button type="button" className="filterResetBtn" onClick={() => { setNameQuery(""); setDateFrom(""); setDateTo(""); }}>
             Reset
           </button>
         )}
@@ -203,7 +205,7 @@ export function HistoryTable({
                 className="historyTable-row"
                 onClick={() => handleRowClick(item)}
               >
-                <td>{item.request.name || item.request.url || item.id}</td>
+                <td className="historyTable-nameCell">{item.request.name?.trim() || truncateUrl(item.request.url) || item.id}</td>
                 <td className="timecode">{formatDate(item.created_at)}</td>
                 <td className="historyTable-source" title={item.request.url || item.id}>
                   {truncateUrl(item.request.url) || item.id}
@@ -214,8 +216,18 @@ export function HistoryTable({
                   </span>
                 </td>
                 <td className="timecode">{count}</td>
-                <td className="historyTable-chevron">
-                  <ChevronRight size={16} />
+                <td className="historyTable-actionsCol">
+                  <button
+                    type="button"
+                    className="iconButton dangerIconButton"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm("Hapus project ini?")) onDeleteJob(item.id);
+                    }}
+                    title="Hapus project"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </td>
               </tr>
             );

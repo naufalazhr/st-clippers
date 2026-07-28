@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "reac
 import toast from "react-hot-toast";
 import {
   createJob,
+  deleteJob,
   deleteJobs,
   fetchModels,
   getJob,
@@ -143,11 +144,31 @@ export default function HomePage() {
      setError("");
    }, []);
 
-  useEffect(() => {
-    loadJobs().catch(() => undefined);
-  }, [loadJobs]);
+   useEffect(() => {
+     loadJobs().catch(() => undefined);
+   }, [loadJobs]);
 
-  const handleLoadModels = useCallback(async () => {
+   // Poll active job for status updates
+   useEffect(() => {
+     if (!activeJobId) return;
+
+     const interval = window.setInterval(async () => {
+       try {
+         const nextJob = await getJob(activeJobId);
+         setJob(nextJob);
+
+         if (nextJob.status === "completed" || nextJob.status === "failed") {
+           loadJobs().catch(() => undefined);
+         }
+       } catch {
+         // Silently skip failed polls — the interval will retry
+       }
+     }, JOB_POLL_INTERVAL_MS);
+
+     return () => window.clearInterval(interval);
+   }, [activeJobId, loadJobs]);
+
+   const handleLoadModels = useCallback(async () => {
     const base = aiBaseUrl.trim();
     if (!base) return;
     setIsLoadingModels(true);
@@ -354,6 +375,16 @@ export default function HomePage() {
     });
   }, [handleDeleteAllConfirmed]);
 
+  const handleDeleteJob = useCallback(async (jobId: string) => {
+    try {
+      await deleteJob(jobId);
+      if (job?.id === jobId) setJob(null);
+      await loadJobs();
+    } catch {
+      toast.error("Gagal menghapus project");
+    }
+  }, [job?.id, loadJobs]);
+
   if (isDesktop) {
     return (
       <DesktopShell
@@ -442,7 +473,7 @@ export default function HomePage() {
               </>
             )
           ) : (
-            <HistoryTable jobs={jobs} loading={jobsLoading} onSelectJob={setJob} onDeleteAll={handleDeleteAll} onViewChange={setView} />
+            <HistoryTable jobs={jobs} loading={jobsLoading} onSelectJob={setJob} onDeleteAll={handleDeleteAll} onDeleteJob={handleDeleteJob} onViewChange={setView} />
           )
         }
         statusbar={

@@ -12,8 +12,8 @@ export interface SidebarProps {
 }
 
 const NAV_ITEMS: { id: DesktopView; label: string; icon: typeof Scissors }[] = [
-  { id: "clip", label: "New Clip", icon: Scissors },
   { id: "editor", label: "Editor", icon: Sliders },
+  { id: "clip", label: "New Clip", icon: Scissors },
   { id: "history", label: "History", icon: History },
 ];
 

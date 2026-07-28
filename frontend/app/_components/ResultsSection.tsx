@@ -68,7 +68,12 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
 
             return (
               <article className="clipCard" key={clip.url}>
-                <video controls preload="metadata" src={url} />
+                <video
+                  controls
+                  preload="metadata"
+                  src={url}
+                  poster={clip.thumbnail_url ? getOutputUrl(clip.thumbnail_url) : undefined}
+                />
                 <div className="clipInfo">
                   <h3>{title}</h3>
                   <button

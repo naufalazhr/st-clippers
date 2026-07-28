@@ -62,6 +62,13 @@ export const deleteJobs = async () => {
   }
 };
 
+export const deleteJob = async (jobId: string) => {
+  const response = await fetch(`${CLIENT_API_BASE}/api/jobs/${jobId}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error("Failed to delete job");
+  }
+};
+
 export const getJob = async (jobId: string) => {
   const response = await fetch(`${CLIENT_API_BASE}/api/jobs/${jobId}`, { cache: "no-store" });
   if (!response.ok) {
