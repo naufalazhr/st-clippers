@@ -6,10 +6,12 @@ import re
 import shutil
 import subprocess
 import sys
+import struct
 import threading
 import time
 import traceback
 import uuid
+import wave
 from math import ceil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -78,6 +80,15 @@ class ClipJobRequest(BaseModel):
     ai_model: str = ""
     ai_api_key: str = ""
     name: str = ""
+    watermark_text: str | None = None
+    watermark_image: str | None = None
+    watermark_position: str = "bottom-right"
+    watermark_opacity: float = Field(default=0.8, ge=0.0, le=1.0)
+    watermark_scale: int = Field(default=100, ge=1, le=500)
+    watermark_font_family: str | None = None
+    watermark_color: str | None = None
+    watermark_margin_x: int = Field(default=20, ge=0)
+    watermark_margin_y: int = Field(default=20, ge=0)
 
     @field_validator("caption_color", "caption_outline_color")
     @classmethod
@@ -110,12 +121,29 @@ class TimelineData(BaseModel):
     duration: float
     segments: list[TranscriptSegmentOut]
     candidates: list[ClipCandidate]
+    peaks: list[int] = []
 
 
 class RecutRequest(BaseModel):
     index: int
     start: float = Field(ge=0)
     end: float = Field(ge=0)
+    segments: list[dict] | None = Field(default=None)
+    caption_font_size: int | None = None
+    caption_position: str | None = None
+    caption_color: str | None = None
+    caption_font: str | None = None
+    caption_outline: int | None = None
+    caption_outline_color: str | None = None
+    watermark_text: str | None = None
+    watermark_image: str | None = None
+    watermark_position: str = "bottom-right"
+    watermark_opacity: float = Field(default=0.8, ge=0.0, le=1.0)
+    watermark_scale: int = Field(default=100, ge=1, le=500)
+    watermark_font_family: str | None = None
+    watermark_color: str | None = None
+    watermark_margin_x: int = Field(default=20, ge=0)
+    watermark_margin_y: int = Field(default=20, ge=0)
 
 
 class ClipFile(BaseModel):
@@ -289,12 +317,19 @@ def discover_work_dir(started_at: float) -> str | None:
     return parent.relative_to(OUTPUTS_DIR.resolve()).as_posix()
 
 
-def recut_clip(job: ClipJob, index: int, start: float, end: float) -> tuple[ClipFile, ClipCandidate]:
-    # Lazy import: clipper has its own ClipCandidate dataclass; api.py has a pydantic model of the same name.
+def recut_clip(
+    job: ClipJob,
+    index: int,
+    start: float,
+    end: float,
+    override_segments: list[dict] | None = None,
+    recut_request: "RecutRequest | None" = None,
+) -> tuple[ClipFile, ClipCandidate]:
     from clipper import ClipCandidate as ClipCandidateDC, TranscriptSegment as TranscriptSegmentDC
-    from clipper import segments_for_clip, CaptionStyle, AIConfig, export_clip
+    from clipper import segments_for_clip, CaptionStyle, AIConfig, export_clip, WatermarkStyle
 
     req = job.request
+    rr = recut_request
     work_dir = OUTPUTS_DIR / job.work_dir
     source = next(work_dir.glob("source.*"), None)
     if not source:
@@ -305,6 +340,9 @@ def recut_clip(job: ClipJob, index: int, start: float, end: float) -> tuple[Clip
         raise ValueError("no transcript")
     rows = json.loads(transcript_files[-1].read_text(encoding="utf-8"))
     segments = [TranscriptSegmentDC(**s) for s in rows]
+
+    if override_segments is not None and len(override_segments) == 0:
+        raise ValueError("segments must not be empty")
 
     duration = probe_media_duration(source) or max((s.end for s in segments), default=0)
 
@@ -327,17 +365,52 @@ def recut_clip(job: ClipJob, index: int, start: float, end: float) -> tuple[Clip
         reason=cand.reason,
         text=cand.text,
     )
-    clip_segments = segments_for_clip(segments, dc_cand)
+
+    if override_segments is not None and len(override_segments) == 0:
+        raise ValueError("segments must not be empty")
+
+    if override_segments is not None:
+        clip_segments = [
+            TranscriptSegmentDC(start=s["start"], end=s["end"], text=s["text"])
+            for s in override_segments
+        ]
+        (work_dir / "transcript_edited.json").write_text(
+            json.dumps(override_segments, ensure_ascii=False), encoding="utf-8"
+        )
+    else:
+        clip_segments = segments_for_clip(segments, dc_cand)
+
+    def _pick(override, fallback):
+        return override if override is not None else fallback
 
     caption = CaptionStyle(
-        font_size=req.caption_font_size,
-        position=req.caption_position,
-        color=req.caption_color,
-        font_family=req.caption_font,
-        outline_width=req.caption_outline,
-        outline_color=req.caption_outline_color,
+        font_size=_pick(rr.caption_font_size if rr else None, req.caption_font_size),
+        position=_pick(rr.caption_position if rr else None, req.caption_position),
+        color=_pick(rr.caption_color if rr else None, req.caption_color),
+        font_family=_pick(rr.caption_font if rr else None, req.caption_font),
+        outline_width=_pick(rr.caption_outline if rr else None, req.caption_outline),
+        outline_color=_pick(rr.caption_outline_color if rr else None, req.caption_outline_color),
     )
     ai = AIConfig(enabled=False)
+
+    wm: WatermarkStyle | None = None
+    wm_text = _pick(rr.watermark_text if rr else None, req.watermark_text)
+    wm_image = _pick(rr.watermark_image if rr else None, req.watermark_image)
+    if wm_text or wm_image:
+        wm_img_path = None
+        if wm_image:
+            wm_img_path = (OUTPUTS_DIR / job.work_dir / wm_image).resolve()
+        wm = WatermarkStyle(
+            text=wm_text,
+            image_path=wm_img_path,
+            position=_pick(rr.watermark_position if rr else None, req.watermark_position),
+            opacity=_pick(rr.watermark_opacity if rr else None, req.watermark_opacity),
+            scale=_pick(rr.watermark_scale if rr else None, req.watermark_scale),
+            font_family=_pick(rr.watermark_font_family if rr else None, req.watermark_font_family),
+            color=_pick(rr.watermark_color if rr else None, req.watermark_color),
+            margin_x=_pick(rr.watermark_margin_x if rr else None, req.watermark_margin_x),
+            margin_y=_pick(rr.watermark_margin_y if rr else None, req.watermark_margin_y),
+        )
 
     out_path = export_clip(
         video_path=source,
@@ -350,6 +423,7 @@ def recut_clip(job: ClipJob, index: int, start: float, end: float) -> tuple[Clip
         ai_config=ai,
         cam_corner=req.cam_corner,
         required_hashtags=req.required_hashtags,
+        watermark=wm,
     )
 
     py_cand = ClipCandidate(
@@ -503,6 +577,23 @@ def build_clipper_command(request: ClipJobRequest) -> list[str]:
             command.extend(["--ai-model", request.ai_model])
         if request.ai_api_key:
             command.extend(["--ai-api-key", request.ai_api_key])
+
+    if request.watermark_text:
+        command.extend(["--watermark-text", request.watermark_text])
+    if request.watermark_image:
+        abs_path = str((OUTPUTS_DIR / request.watermark_image).resolve())
+        command.extend(["--watermark-image", abs_path])
+    if request.watermark_text or request.watermark_image:
+        command.extend(["--watermark-position", request.watermark_position])
+        command.extend(["--watermark-opacity", str(request.watermark_opacity)])
+        command.extend(["--watermark-scale", str(request.watermark_scale)])
+        command.extend(["--watermark-margin-x", str(request.watermark_margin_x)])
+        command.extend(["--watermark-margin-y", str(request.watermark_margin_y)])
+        if request.watermark_font_family:
+            command.extend(["--watermark-font-family", request.watermark_font_family])
+        if request.watermark_color:
+            command.extend(["--watermark-color", request.watermark_color])
+
     command.append("--keep-intermediate")
     command.extend(["--output", str(OUTPUTS_DIR.resolve())])
     return command
@@ -681,9 +772,51 @@ def upload_video(file: UploadFile = File(...)) -> dict[str, str | float | None]:
     }
 
 
+@app.post("/api/jobs/{job_id}/watermark-upload")
+def upload_watermark(job_id: str, file: UploadFile = File(...)) -> dict[str, str]:
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    if not job.work_dir:
+        raise HTTPException(status_code=404, detail="job has no work directory")
+
+    filename = file.filename or ""
+    is_png = (file.content_type == "image/png") or filename.lower().endswith(".png")
+    if not is_png:
+        raise HTTPException(status_code=422, detail="Only PNG images are accepted")
+
+    work_dir = OUTPUTS_DIR / job.work_dir
+    work_dir.mkdir(parents=True, exist_ok=True)
+    target = work_dir / "watermark.png"
+    try:
+        with target.open("wb") as out:
+            shutil.copyfileobj(file.file, out)
+    finally:
+        file.file.close()
+
+    return {"watermark_image": "watermark.png"}
+
+
 @app.get("/api/probe")
-def probe_url(url: str) -> dict[str, float | None]:
-    return {"duration": fetch_video_duration(url)}
+def probe_url(url: str) -> dict[str, float | str | None]:
+    from clipper import _ydl_base_opts
+
+    ydl_opts = {**_ydl_base_opts(), "skip_download": True}
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:  # noqa: BROAD_EXCEPT_OK — probe endpoint soft-fails
+        return {"duration": None, "title": None}
+
+    if not isinstance(info, dict):
+        return {"duration": None, "title": None}
+    duration = info.get("duration")
+    title = info.get("title")
+    return {
+        "duration": float(duration) if duration else None,
+        "title": str(title) if title else None,
+    }
 
 
 @app.post("/api/jobs", response_model=ClipJob)
@@ -772,6 +905,56 @@ def get_job(job_id: str) -> ClipJob:
     return job
 
 
+def _compute_peaks(wav_path: Path, num_points: int = 1000) -> list[int]:
+    """Read a mono WAV via stdlib, return ~num_points RMS values in [-128, 127]."""
+    with wave.open(str(wav_path), "rb") as wf:
+        n_channels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+        n_frames = wf.getnframes()
+        raw = wf.readframes(n_frames)
+
+    # Only 16-bit PCM supported (clipper.py produces exactly this)
+    if sampwidth != 2:
+        return []
+
+    fmt = f"<{n_frames * n_channels}h"
+    samples = struct.unpack(fmt, raw)
+    mono = samples[::n_channels]
+    total = len(mono)
+    if total == 0:
+        return []
+
+    stride = max(1, total // num_points)
+    peaks: list[int] = []
+    for i in range(0, total, stride):
+        window = mono[i : i + stride]
+        rms = math.sqrt(sum(s * s for s in window) / len(window))
+        normalized = int((rms / 32768.0) * 255) - 128
+        peaks.append(max(-128, min(127, normalized)))
+        if len(peaks) >= num_points:
+            break
+
+    return peaks
+
+
+def _get_peaks(work_dir: Path) -> list[int]:
+    """Return cached peaks or compute+cache them. Never raises."""
+    try:
+        cache_path = work_dir / "peaks.json"
+        if cache_path.exists():
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+
+        wav_files = sorted(work_dir.glob("audio*.wav"), key=lambda p: p.stat().st_mtime)
+        if not wav_files:
+            return []
+
+        peaks = _compute_peaks(wav_files[-1])
+        cache_path.write_text(json.dumps(peaks), encoding="utf-8")
+        return peaks
+    except Exception:
+        return []
+
+
 @app.get("/api/jobs/{job_id}/timeline", response_model=TimelineData)
 def get_job_timeline(job_id: str) -> TimelineData:
     with jobs_lock:
@@ -799,6 +982,7 @@ def get_job_timeline(job_id: str) -> TimelineData:
         duration=duration,
         segments=segments,
         candidates=job.candidates,
+        peaks=_get_peaks(work_dir),
     )
 
 
@@ -812,7 +996,7 @@ def recut_job(job_id: str, body: RecutRequest) -> dict[str, ClipFile | ClipCandi
         raise HTTPException(status_code=404, detail="Source not available")
 
     try:
-        new_clip, new_cand = recut_clip(job, body.index, body.start, body.end)
+        new_clip, new_cand = recut_clip(job, body.index, body.start, body.end, body.segments, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

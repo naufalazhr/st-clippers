@@ -88,8 +88,11 @@ export function CropCaptionSection({
           <div className="captionFields">
             <div className="captionControls">
               <div className="segmentedField">
-                <span>Ukuran Font: <strong>{captionFontSize}</strong></span>
-                <input className="fontSlider" type="range" min={CAPTION_FONT_SIZE_MIN} max={CAPTION_FONT_SIZE_MAX} step={1} value={captionFontSize} onChange={(event) => onCaptionFontSizeChange(Number(event.target.value))} aria-label="Ukuran font caption" />
+                <span>Ukuran Font</span>
+                <div className="sliderRow">
+                  <input className="fontSlider" type="range" min={CAPTION_FONT_SIZE_MIN} max={CAPTION_FONT_SIZE_MAX} step={1} value={captionFontSize} onChange={(event) => onCaptionFontSizeChange(Number(event.target.value))} aria-label="Ukuran font caption" />
+                  <span className="sliderReadout">{captionFontSize}px</span>
+                </div>
                 <div className="sliderTicks"><span>Kecil</span><span>Sedang</span><span>Besar</span></div>
               </div>
 
@@ -122,8 +125,11 @@ export function CropCaptionSection({
               </div>
 
               <div className="segmentedField">
-                <span>Tebal Border: <strong>{captionOutline}</strong></span>
-                <input className="fontSlider" type="range" min={0} max={8} step={0.5} value={captionOutline} onChange={(event) => onCaptionOutlineChange(Number(event.target.value))} aria-label="Tebal border caption" />
+                <span>Tebal Border</span>
+                <div className="sliderRow">
+                  <input className="fontSlider" type="range" min={0} max={8} step={0.5} value={captionOutline} onChange={(event) => onCaptionOutlineChange(Number(event.target.value))} aria-label="Tebal border caption" />
+                  <span className="sliderReadout">{captionOutline}px</span>
+                </div>
                 <div className="sliderTicks"><span>Tanpa</span><span>Tebal</span></div>
               </div>
             </div>

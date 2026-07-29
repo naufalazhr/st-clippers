@@ -36,15 +36,15 @@ export const fetchModels = async (baseUrl: string, apiKey: string) => {
   return data.models;
 };
 
-export const probeUrlDuration = async (url: string) => {
+export const probeUrlDuration = async (url: string): Promise<{ duration: number | null; title: string | null } | null> => {
   const response = await fetch(`${API_BASE}/api/probe?url=${encodeURIComponent(url)}`, {
     cache: "no-store",
   });
   if (!response.ok) {
     return null;
   }
-  const data = (await response.json()) as { duration: number | null };
-  return data.duration;
+  const data = (await response.json()) as { duration: number | null; title: string | null };
+  return data;
 };
 
 export const getJobs = async () => {
@@ -119,7 +119,21 @@ export const getTimeline = async (jobId: string): Promise<TimelineData> => {
   return response.json() as Promise<TimelineData>;
 };
 
-export const recutClip = async (jobId: string, body: { index: number; start: number; end: number }): Promise<RecutResponse> => {
+export const uploadWatermarkImage = async (jobId: string, file: File): Promise<{ url: string }> => {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/api/jobs/${jobId}/watermark-upload`, {
+    method: "POST",
+    body: form,
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || "Failed to upload watermark image");
+  }
+  return response.json() as Promise<{ url: string }>;
+};
+
+export const recutClip = async (jobId: string, body: { index: number; start: number; end: number; segments?: { start: number; end: number; text: string }[] }): Promise<RecutResponse> => {
   const response = await fetch(`${CLIENT_API_BASE}/api/jobs/${jobId}/recut`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

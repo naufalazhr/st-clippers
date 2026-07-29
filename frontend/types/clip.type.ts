@@ -91,6 +91,24 @@ export type CreateClipJobInput = {
   name?: string;
 };
 
+export type WatermarkType = "none" | "text" | "image";
+export type WatermarkPosition =
+  | "top-left" | "top-center" | "top-right"
+  | "middle-left" | "middle-center" | "middle-right"
+  | "bottom-left" | "bottom-center" | "bottom-right";
+
+export type WatermarkConfig = {
+  type: WatermarkType;
+  text: string;
+  position: WatermarkPosition;
+  opacity: number;
+  scale: number;
+  fontFamily: string;
+  color: string;
+  imageFile: File | null;
+  uploadedImageUrl: string | null;
+};
+
 export type TranscriptSegment = {
   start: number;
   end: number;
@@ -102,4 +120,5 @@ export type TimelineData = {
   duration: number;
   segments: TranscriptSegment[];
   candidates: ClipCandidate[];
+  peaks: number[];
 };

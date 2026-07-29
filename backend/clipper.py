@@ -159,8 +159,13 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
         step = duration / (sample_count + 1)
         offsets = [step * (index + 1) for index in range(sample_count)]
 
-    hog = cv2.HOGDescriptor()
-    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+    try:
+        hog = cv2.HOGDescriptor()
+        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+    except (AttributeError, RuntimeError) as exc:
+        console.print(f"[yellow]HOG person detector unavailable (falling back to center crop):[/yellow] {exc}")
+        capture.release()
+        return None
     _frozen_haar = frozen_base() / "cv2" / "data" / "haarcascades"
     _haar_dir = _frozen_haar if _frozen_haar.exists() else Path(cv2.data.haarcascades)
     face_cascade = cv2.CascadeClassifier(str(_haar_dir / "haarcascade_frontalface_default.xml"))
@@ -902,6 +907,78 @@ def build_subtitle_style(caption: CaptionStyle) -> str:
     )
 
 
+WATERMARK_POSITIONS = {
+    "top-left":      ("main_w*{m}",                  "main_h*{m}"),
+    "top-center":    ("(main_w-overlay_w)/2",         "main_h*{m}"),
+    "top-right":     ("main_w-overlay_w-main_w*{m}", "main_h*{m}"),
+    "center-left":   ("main_w*{m}",                  "(main_h-overlay_h)/2"),
+    "center":        ("(main_w-overlay_w)/2",         "(main_h-overlay_h)/2"),
+    "center-right":  ("main_w-overlay_w-main_w*{m}", "(main_h-overlay_h)/2"),
+    "bottom-left":   ("main_w*{m}",                  "main_h-overlay_h-main_h*{m}"),
+    "bottom-center": ("(main_w-overlay_w)/2",         "main_h-overlay_h-main_h*{m}"),
+    "bottom-right":  ("main_w-overlay_w-main_w*{m}", "main_h-overlay_h-main_h*{m}"),
+}
+_DEFAULT_WATERMARK_POSITION = "bottom-right"
+
+
+@dataclass
+class WatermarkStyle:
+    text: str | None = None
+    image_path: Path | None = None
+    position: str = _DEFAULT_WATERMARK_POSITION
+    opacity: float = 0.8
+    scale: int = 100
+    font_family: str | None = None
+    color: str | None = None
+    margin_x: int = 20
+    margin_y: int = 20
+
+
+def build_watermark_filter(wm: WatermarkStyle, clips_dir: Path) -> str:
+    pos_key = wm.position if wm.position in WATERMARK_POSITIONS else _DEFAULT_WATERMARK_POSITION
+    mx_ratio = wm.margin_x / 1080
+    my_ratio = wm.margin_y / 1920
+
+    x_expr_tmpl, y_expr_tmpl = WATERMARK_POSITIONS[pos_key]
+    x_expr = x_expr_tmpl.replace("{m}", f"{mx_ratio:.4f}")
+    y_expr = y_expr_tmpl.replace("{m}", f"{my_ratio:.4f}")
+
+    if wm.image_path is not None:
+        opacity = max(0.0, min(1.0, wm.opacity))
+        scale_f = max(1, min(500, wm.scale)) / 100.0
+        fc = (
+            f"[0:v]null[vid];"
+            f"[1:v]scale=iw*{scale_f:.4f}:ih*{scale_f:.4f},"
+            f"format=rgba,colorchannelmixer=aa={opacity:.4f}[wm];"
+            f"[vid][wm]overlay={x_expr}:{y_expr}"
+        )
+        return f"_fc:{fc}"
+
+    if wm.text:
+        opacity = max(0.0, min(1.0, wm.opacity))
+        font_name = AVAILABLE_FONTS.get(wm.font_family or "", DEFAULT_FONT)
+        color_val = (wm.color or "#FFFFFF").lstrip("#")
+        if len(color_val) == 3:
+            color_val = "".join(c * 2 for c in color_val)
+        if len(color_val) != 6:
+            color_val = "FFFFFF"
+        textfile = clips_dir / "_wm_text.txt"
+        textfile.write_text(wm.text.replace("\n", " "), encoding="utf-8")
+        fontfile = frozen_base() / "fonts" / f"{font_name}.ttf"
+        fontfile_part = f":fontfile='{fontfile}'" if fontfile.exists() else ""
+        alpha_part = f":alpha={opacity:.4f}" if opacity < 1.0 else ""
+        return (
+            f"drawtext=textfile='{textfile.name}'"
+            f":fontcolor=#{color_val.upper()}"
+            f":fontsize=36"
+            f"{fontfile_part}"
+            f":x={x_expr}:y={y_expr}"
+            f"{alpha_part}"
+        )
+
+    return ""
+
+
 THUMBNAIL_SYSTEM_PROMPT = (
     "You write prompts for an AI image generator that will ONLY add a text overlay onto a "
     "provided screenshot. The screenshot is the thumbnail background and must NOT be redrawn, "
@@ -1069,6 +1146,7 @@ def export_clip(
     ai_config: AIConfig | None = None,
     cam_corner: str = "auto",
     required_hashtags: list[str] | None = None,
+    watermark: WatermarkStyle | None = None,
 ) -> Path:
     clips_dir.mkdir(parents=True, exist_ok=True)
     base_name = f"clip_{clip.index:02}_{slugify(clip.title)[:42] or 'auto'}"
@@ -1094,6 +1172,9 @@ def export_clip(
             f":force_style='{style}'"
         )
 
+    wm_filter = build_watermark_filter(watermark, clips_dir) if watermark else ""
+    use_filter_complex = wm_filter.startswith("_fc:")
+
     common_input = [
         ffmpeg_path(),
         "-hide_banner",
@@ -1108,14 +1189,17 @@ def export_clip(
         str(video_path.resolve()),
     ]
 
-    run(
-        [
+    if use_filter_complex:
+        fc_expr = wm_filter[len("_fc:"):]
+        video_pass_cmd = [
             *common_input,
+            "-i",
+            str(watermark.image_path.resolve()),  # type: ignore[union-attr]
+            "-filter_complex",
+            f"{vf}[pre];[pre]{fc_expr}" if vf else fc_expr,
             "-map",
-            "0:v:0",
+            "[vid]" if "[vid]" in fc_expr else "0:v:0",
             "-an",
-            "-vf",
-            vf,
             "-c:v",
             "libx264",
             "-profile:v",
@@ -1129,9 +1213,32 @@ def export_clip(
             "-pix_fmt",
             "yuv420p",
             str(temp_video_path.name),
-        ],
-        cwd=clips_dir,
-    )
+        ]
+    else:
+        final_vf = f"{vf},{wm_filter}" if vf and wm_filter else (vf or wm_filter)
+        video_pass_cmd = [
+            *common_input,
+            "-map",
+            "0:v:0",
+            "-an",
+            "-vf",
+            final_vf,
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "baseline",
+            "-level",
+            "4.0",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            str(temp_video_path.name),
+        ]
+
+    run(video_pass_cmd, cwd=clips_dir)
     run(
         [
             *common_input,
@@ -1313,6 +1420,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--caption-font", default=DEFAULT_FONT, help="Burned caption font family")
     parser.add_argument("--caption-outline", type=float, default=2.0, help="Caption border/outline width (0-8)")
     parser.add_argument("--caption-outline-color", default="#000000", help="Caption border color, hex")
+    parser.add_argument("--watermark-text", default="", help="Text watermark to overlay on clips")
+    parser.add_argument("--watermark-image", default="", help="Absolute path to PNG watermark image")
+    parser.add_argument("--watermark-position", default="bottom-right", help="Watermark position key")
+    parser.add_argument("--watermark-opacity", type=float, default=0.8, help="Watermark opacity 0.0-1.0")
+    parser.add_argument("--watermark-scale", type=int, default=100, help="Watermark scale percent 1-500")
+    parser.add_argument("--watermark-font-family", default="", help="Font family for text watermark")
+    parser.add_argument("--watermark-color", default="", help="Color for text watermark, hex")
+    parser.add_argument("--watermark-margin-x", type=int, default=20, help="Watermark horizontal margin px")
+    parser.add_argument("--watermark-margin-y", type=int, default=20, help="Watermark vertical margin px")
     parser.add_argument(
         "--keep-intermediate",
         action="store_true",
@@ -1417,6 +1533,20 @@ def main() -> int:
         outline_color=args.caption_outline_color,
     )
 
+    wm: WatermarkStyle | None = None
+    if args.watermark_text or args.watermark_image:
+        wm = WatermarkStyle(
+            text=args.watermark_text or None,
+            image_path=Path(args.watermark_image) if args.watermark_image else None,
+            position=args.watermark_position,
+            opacity=args.watermark_opacity,
+            scale=args.watermark_scale,
+            font_family=args.watermark_font_family or None,
+            color=args.watermark_color or None,
+            margin_x=args.watermark_margin_x,
+            margin_y=args.watermark_margin_y,
+        )
+
     required_hashtags = [tag for tag in args.required_hashtags.split(",") if tag.strip()]
 
     console.print("[bold]Exporting vertical clips...[/bold]")
@@ -1436,6 +1566,7 @@ def main() -> int:
                 ai_config,
                 args.cam_corner,
                 required_hashtags,
+                wm,
             )
         )
 

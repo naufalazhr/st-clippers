@@ -1,6 +1,6 @@
 # Security
 
-ClipForge is designed for local-first use.
+Sultan Clip is designed for local-first use.
 
 ## Public deployments
 

@@ -10,6 +10,7 @@ import { HashtagsSection } from "../sections/HashtagsSection";
 import { JobFooter } from "../sections/JobFooter";
 import { RangeSection } from "../sections/RangeSection";
 import { SourceSection } from "../sections/SourceSection";
+import { WatermarkSection } from "../sections/WatermarkSection";
 import "./InspectorPanel.css";
 
 function CollapseGroup({ title, defaultOpen, children }: { title: string; defaultOpen: boolean; children: React.ReactNode }) {
@@ -32,6 +33,19 @@ export function InspectorPanel(props: ControlPanelProps) {
   const hasSource = props.sourceMode === "url" ? Boolean(props.url.trim()) : Boolean(props.uploadFileName);
   const isStartDisabled = props.isSubmitting || props.isBusy || props.isUploading || !hasSource;
   const isProcessing = props.isSubmitting || props.isBusy;
+
+  const watermarkStyleProp = props.watermarkType !== "none"
+    ? {
+        type: props.watermarkType as "text" | "image",
+        text: props.watermarkText,
+        imageUrl: props.watermarkUploadedImageUrl ?? (props.watermarkImage ? URL.createObjectURL(props.watermarkImage) : undefined),
+        position: props.watermarkPosition,
+        opacity: props.watermarkOpacity,
+        scale: props.watermarkScale,
+        fontFamily: props.watermarkFontFamily,
+        color: props.watermarkColor,
+      }
+    : undefined;
 
   return (
     <aside className="inspectorPanel">
@@ -87,6 +101,28 @@ export function InspectorPanel(props: ControlPanelProps) {
           />
         </CollapseGroup>
 
+        <CollapseGroup title="Watermark" defaultOpen={false}>
+          <WatermarkSection
+            watermarkType={props.watermarkType}
+            onWatermarkTypeChange={props.onWatermarkTypeChange}
+            watermarkText={props.watermarkText}
+            onWatermarkTextChange={props.onWatermarkTextChange}
+            watermarkPosition={props.watermarkPosition}
+            onWatermarkPositionChange={props.onWatermarkPositionChange}
+            watermarkOpacity={props.watermarkOpacity}
+            onWatermarkOpacityChange={props.onWatermarkOpacityChange}
+            watermarkScale={props.watermarkScale}
+            onWatermarkScaleChange={props.onWatermarkScaleChange}
+            watermarkFontFamily={props.watermarkFontFamily}
+            onWatermarkFontFamilyChange={props.onWatermarkFontFamilyChange}
+            watermarkColor={props.watermarkColor}
+            onWatermarkColorChange={props.onWatermarkColorChange}
+            watermarkImage={props.watermarkImage}
+            onWatermarkImageChange={props.onWatermarkImageChange}
+            uploadedImageUrl={props.watermarkUploadedImageUrl}
+          />
+        </CollapseGroup>
+
         <CollapseGroup title="AI" defaultOpen={false}>
           <AiSection
             aiEnabled={props.aiEnabled}
@@ -123,8 +159,11 @@ export function InspectorPanel(props: ControlPanelProps) {
           font={props.captionFont}
           outline={props.captionOutline}
           outlineColor={props.captionOutlineColor}
+          watermarkStyle={watermarkStyleProp}
         />
       </div>
     </aside>
   );
 }
+
+

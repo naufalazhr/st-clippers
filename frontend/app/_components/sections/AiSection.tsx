@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Eye, EyeOff, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
 type AiSectionProps = {
   aiEnabled: boolean;
@@ -29,6 +30,7 @@ export function AiSection({
   onAiModelChange,
   onAiApiKeyChange,
 }: AiSectionProps) {
+  const [showKey, setShowKey] = useState(false);
   return (
     <div className="sectionBody">
       <div className="aiBlock">
@@ -46,7 +48,12 @@ export function AiSection({
             </label>
             <label className="field wide">
               <span>API Key</span>
-              <input type="password" value={aiApiKey} onChange={(event) => onAiApiKeyChange(event.target.value)} placeholder="sk-..." autoComplete="off" />
+              <div className="passwordField">
+                <input type={showKey ? "text" : "password"} value={aiApiKey} onChange={(event) => onAiApiKeyChange(event.target.value)} placeholder="sk-..." autoComplete="off" />
+                <button type="button" className="passwordToggle" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? "Sembunyikan API key" : "Tampilkan API key"}>
+                  {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
             </label>
             <label className="field wide">
               <span>Model</span>

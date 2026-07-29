@@ -36,6 +36,8 @@ import type {
   ClipJob,
   CropMode,
   SourceMode,
+  WatermarkPosition,
+  WatermarkType,
 } from "../types/clip.type";
 import { ControlPanel } from "./_components/ControlPanel";
 import { DeleteAllToast } from "./_components/DeleteAllToast";
@@ -80,7 +82,16 @@ export default function HomePage() {
   const [aiBaseUrl, setAiBaseUrl] = useState(DEFAULT_AI_BASE_URL);
   const [aiModel, setAiModel] = useState(DEFAULT_AI_MODEL);
   const [aiApiKey, setAiApiKey] = useState("");
-  const [requiredHashtags, setRequiredHashtags] = useState("");
+  const [requiredHashtags, setRequiredHashtags] = useState<string[]>([]);
+  const [watermarkType, setWatermarkType] = useState<WatermarkType>("none");
+  const [watermarkText, setWatermarkText] = useState("");
+  const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
+  const [watermarkOpacity, setWatermarkOpacity] = useState(80);
+  const [watermarkScale, setWatermarkScale] = useState(100);
+  const [watermarkFontFamily, setWatermarkFontFamily] = useState("DejaVu Sans");
+  const [watermarkColor, setWatermarkColor] = useState("#FFFFFF");
+  const [watermarkImage, setWatermarkImage] = useState<File | null>(null);
+  const [watermarkUploadedImageUrl, setWatermarkUploadedImageUrl] = useState<string | null>(null);
   const [aiModels, setAiModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [job, setJob] = useState<ClipJob | null>(null);
@@ -115,8 +126,11 @@ export default function HomePage() {
     }
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      const duration = await probeUrlDuration(trimmed).catch(() => null);
-      if (!cancelled) setVideoDuration(duration);
+      const result = await probeUrlDuration(trimmed).catch(() => null);
+      if (!cancelled) {
+        setVideoDuration(result?.duration ?? null);
+        if (result?.title && !name.trim()) setName(result.title);
+      }
     }, 700);
     return () => {
       cancelled = true;
@@ -309,10 +323,7 @@ export default function HomePage() {
           caption_font: captionFont,
           caption_outline: captionOutline,
           caption_outline_color: captionOutlineColor,
-          required_hashtags: requiredHashtags
-            .split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean),
+          required_hashtags: requiredHashtags,
           ai_enabled: aiEnabled,
           ai_base_url: aiBaseUrl.trim(),
           ai_model: aiModel.trim(),
@@ -458,6 +469,23 @@ export default function HomePage() {
                url={url}
                name={name}
                onNameChange={setName}
+               watermarkType={watermarkType}
+               onWatermarkTypeChange={setWatermarkType}
+               watermarkText={watermarkText}
+               onWatermarkTextChange={setWatermarkText}
+               watermarkPosition={watermarkPosition}
+               onWatermarkPositionChange={setWatermarkPosition}
+               watermarkOpacity={watermarkOpacity}
+               onWatermarkOpacityChange={setWatermarkOpacity}
+               watermarkScale={watermarkScale}
+               onWatermarkScaleChange={setWatermarkScale}
+               watermarkFontFamily={watermarkFontFamily}
+               onWatermarkFontFamilyChange={setWatermarkFontFamily}
+               watermarkColor={watermarkColor}
+               onWatermarkColorChange={setWatermarkColor}
+               watermarkImage={watermarkImage}
+               onWatermarkImageChange={setWatermarkImage}
+               watermarkUploadedImageUrl={watermarkUploadedImageUrl}
              />
           ) : view === "clip" ? (
             jobsLoading && !job ? (
@@ -490,7 +518,7 @@ export default function HomePage() {
 
   return (
     <>
-      <main className="shell py-28">
+      <main className="shell pageTopPad">
         <Topbar onRefresh={loadJobs} />
         <ModelDownloadProgress />
 
@@ -551,6 +579,23 @@ export default function HomePage() {
                  url={url}
                  name={name}
                  onNameChange={setName}
+                 watermarkType={watermarkType}
+                 onWatermarkTypeChange={setWatermarkType}
+                 watermarkText={watermarkText}
+                 onWatermarkTextChange={setWatermarkText}
+                 watermarkPosition={watermarkPosition}
+                 onWatermarkPositionChange={setWatermarkPosition}
+                 watermarkOpacity={watermarkOpacity}
+                 onWatermarkOpacityChange={setWatermarkOpacity}
+                 watermarkScale={watermarkScale}
+                 onWatermarkScaleChange={setWatermarkScale}
+                 watermarkFontFamily={watermarkFontFamily}
+                 onWatermarkFontFamilyChange={setWatermarkFontFamily}
+                 watermarkColor={watermarkColor}
+                 onWatermarkColorChange={setWatermarkColor}
+                 watermarkImage={watermarkImage}
+                 onWatermarkImageChange={setWatermarkImage}
+                 watermarkUploadedImageUrl={watermarkUploadedImageUrl}
                />
             </div>
           </div>

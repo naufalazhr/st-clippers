@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving ClipForge.
+Thanks for improving Sultan Clip.
 
 ## Local setup
 

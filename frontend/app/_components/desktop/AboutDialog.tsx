@@ -22,7 +22,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
     <div className="aboutDialog-overlay" onClick={handleOverlay}>
       <div className="aboutDialog">
         <h2>About Sultan Clip</h2>
-        <p>Sultan Clip v1.0.0</p>
+         <p>Sultan Clip v0.1.0</p>
         <p>Turn long videos into vertical clips, locally.</p>
         <button type="button" onClick={onClose}>
           Close

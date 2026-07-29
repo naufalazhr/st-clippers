@@ -1,5 +1,17 @@
+import type React from "react";
 import { CAPTION_FONTS } from "../../lib/constants";
-import type { CaptionFont, CaptionPosition } from "../../types/clip.type";
+import type { CaptionFont, CaptionPosition, WatermarkPosition } from "../../types/clip.type";
+
+type WatermarkStyle = {
+  type: "text" | "image";
+  text?: string;
+  imageUrl?: string;
+  position: WatermarkPosition;
+  opacity: number;
+  scale: number;
+  fontFamily?: string;
+  color?: string;
+};
 
 type CaptionPreviewProps = {
   fontSize: number;
@@ -8,6 +20,19 @@ type CaptionPreviewProps = {
   font: CaptionFont;
   outline: number;
   outlineColor: string;
+  watermarkStyle?: WatermarkStyle;
+};
+
+const POSITION_STYLE: Record<WatermarkPosition, React.CSSProperties> = {
+  "top-left":      { top: "5%", left: "5%" },
+  "top-center":    { top: "5%", left: "50%", transform: "translateX(-50%)" },
+  "top-right":     { top: "5%", right: "5%" },
+  "middle-left":   { top: "50%", left: "5%", transform: "translateY(-50%)" },
+  "middle-center": { top: "50%", left: "50%", transform: "translate(-50%, -50%)" },
+  "middle-right":  { top: "50%", right: "5%", transform: "translateY(-50%)" },
+  "bottom-left":   { bottom: "5%", left: "5%" },
+  "bottom-center": { bottom: "5%", left: "50%", transform: "translateX(-50%)" },
+  "bottom-right":  { bottom: "5%", right: "5%" },
 };
 
 const PREVIEW_HEIGHT = 320;
@@ -38,6 +63,7 @@ export function CaptionPreview({
   font,
   outline,
   outlineColor,
+  watermarkStyle,
 }: CaptionPreviewProps) {
   const scaledFont = fontSize * FONT_CALIBRATION;
   const fontCss = CAPTION_FONTS.find((item) => item.value === font)?.css ?? "sans-serif";
@@ -47,7 +73,7 @@ export function CaptionPreview({
       <span className="captionPreviewLabel">Preview</span>
       <div
         className="captionPreviewStage"
-        style={{ height: PREVIEW_HEIGHT, aspectRatio: "9 / 16" }}
+        style={{ height: PREVIEW_HEIGHT, aspectRatio: "9 / 16", position: "relative" }}
       >
         <div
           className={`captionPreviewText captionPreviewText--${position}`}
@@ -60,6 +86,39 @@ export function CaptionPreview({
         >
           {SAMPLE_TEXT}
         </div>
+
+        {watermarkStyle && (
+          <div
+            style={{
+              position: "absolute",
+              ...POSITION_STYLE[watermarkStyle.position],
+              opacity: watermarkStyle.opacity / 100,
+              pointerEvents: "none",
+              maxWidth: "80%",
+            }}
+          >
+            {watermarkStyle.type === "text" && watermarkStyle.text && (
+              <span
+                style={{
+                  fontSize: `${(watermarkStyle.scale / 100) * 12}px`,
+                  color: watermarkStyle.color ?? "#ffffff",
+                  fontFamily: CAPTION_FONTS.find((f) => f.value === watermarkStyle.fontFamily)?.css ?? "sans-serif",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {watermarkStyle.text}
+              </span>
+            )}
+            {watermarkStyle.type === "image" && watermarkStyle.imageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={watermarkStyle.imageUrl}
+                alt="watermark"
+                style={{ width: `${watermarkStyle.scale}%`, maxWidth: "100%" }}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

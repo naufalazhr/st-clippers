@@ -877,8 +877,53 @@ a {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  overflow: hidden;
   margin-top: 16px;
+}
+
+.timelineEditorBody {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  padding: 20px;
+}
+
+.timelineEditorSticky {
+  position: sticky;
+  top: 0;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.timelineEditorSticky .timelineVideo {
+  width: 170px;
+  aspect-ratio: 9 / 16;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+.timelineEditorContent {
+  flex: 1;
+  min-width: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.timelineEditorContent::-webkit-scrollbar {
+  width: 6px;
+}
+
+.timelineEditorContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.timelineEditorContent::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
 }
 
 .timelineHeader {
@@ -906,7 +951,6 @@ a {
 
 .timelineVideo {
   width: 100%;
-  max-height: 120px;
   border-radius: var(--radius-sm);
   background: #000;
   margin-bottom: 10px;
@@ -1020,6 +1064,67 @@ a {
   box-shadow: 0 4px 16px rgba(212,160,23,0.3);
 }
 
+/* ── Waveform ── */
+.waveformWrapper {
+  width: 100%;
+  height: 60px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+}
+
+.waveformPlaceholder {
+  background: rgba(255,255,255,0.03);
+}
+
+.waveformZoom {
+  flex: 1;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* ── Transcript rows ── */
+.transcriptRows {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02);
+}
+
+.transcriptRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.transcriptRow:last-child {
+  border-bottom: none;
+}
+
+.transcriptRow:hover {
+  background: var(--panel-hover);
+  color: var(--text-primary);
+}
+
+.transcriptRow .timecode {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
 /* ── Scroll entry animation (used by IntersectionObserver) ── */
 .reveal {
   opacity: 0;
@@ -1057,4 +1162,256 @@ a {
   .wordmark { font-size: 18px; }
   .gridFields { grid-template-columns: 1fr; }
   .sectionHeader { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+
+/* ── Transcript Correction Panel ── */
+.transcriptEditList {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  margin-top: 12px;
+}
+
+.transcriptEditRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+}
+
+.transcriptEditRow:last-child {
+  border-bottom: none;
+}
+
+.transcriptEditRow:hover {
+  background: var(--panel-hover);
+}
+
+.transcriptEditDirty {
+  border-left: 3px solid #D4A017;
+  padding-left: 9px;
+}
+
+.transcriptEditTime {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.transcriptEditText {
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: text;
+  flex: 1;
+  line-height: 1.5;
+}
+
+.transcriptEditText:hover {
+  color: var(--primary);
+}
+
+.transcriptEditInput {
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-soft);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  padding: 2px 8px;
+  flex: 1;
+  outline: none;
+  line-height: 1.5;
+}
+
+.transcriptEditError {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 6px;
+  padding: 0 12px;
+}
+
+.transcriptSection {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.transcriptSectionHeader {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+/* ── Watermark Section ─────────────────────────────────── */
+.watermarkSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.watermarkPositionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 100%;
+}
+
+.watermarkPositionBtn {
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.watermarkPositionBtn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.watermarkPositionBtn--active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+/* ── Slider Row with live readout ──────────────────────── */
+.sliderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.sliderRow input[type="range"] {
+  flex: 1;
+}
+
+.sliderReadout {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  min-width: 40px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Chip / Hashtag input ──────────────────────────────── */
+.chipField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 10px;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--primary);
+  opacity: 0.7;
+  font-size: 14px;
+  line-height: 1;
+  transition: opacity 0.15s;
+}
+
+.chipRemove:hover {
+  opacity: 1;
+}
+
+.chipInput {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.chipInput:focus {
+  border-color: var(--primary);
+}
+
+.chipInput::placeholder {
+  color: var(--text-muted);
+}
+
+/* ── Password field with eye toggle ───────────────────── */
+.passwordField {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.passwordField input {
+  flex: 1;
+  padding-right: 40px;
+}
+
+.passwordToggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.passwordToggle:hover {
+  color: var(--primary);
+}
+
+/* ── Page top padding ──────────────────────────────────── */
+.pageTopPad {
+  padding-top: 112px;
 }
