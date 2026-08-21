@@ -267,8 +267,16 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
         return None
 
 
+# Lanczos keeps fine detail (small text especially) that bicubic smears.
+SCALE_FLAGS = "lanczos"
+CENTER_CROP_FILTER = (
+    f"scale=1080:1920:force_original_aspect_ratio=increase:flags={SCALE_FLAGS},"
+    "crop=1080:1920,setsar=1"
+)
+
+
 def vertical_crop_filter(video_path: Path, clip: ClipCandidate, crop_mode: CropMode) -> str:
-    center_filter = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+    center_filter = CENTER_CROP_FILTER
     if crop_mode == "center":
         return center_filter
 
@@ -284,7 +292,10 @@ def vertical_crop_filter(video_path: Path, clip: ClipCandidate, crop_mode: CropM
     crop_x = clamp_even((focus_x * scaled_width) - 540, 0, scaled_width - 1080)
     crop_y = clamp_even((scaled_height - 1920) / 2, 0, scaled_height - 1920)
     console.print(f"[green]Person crop[/green] clip {clip.index}: focus x={focus_x:.2f}, crop x={crop_x}")
-    return f"scale={scaled_width}:{scaled_height},crop=1080:1920:{crop_x}:{crop_y},setsar=1"
+    return (
+        f"scale={scaled_width}:{scaled_height}:flags={SCALE_FLAGS},"
+        f"crop=1080:1920:{crop_x}:{crop_y},setsar=1"
+    )
 
 
 CamCorner = Literal["br", "bl", "tr", "tl"]
@@ -383,17 +394,17 @@ def streamer_stack_filter(source_width: int, source_height: int, corner: CamCorn
     return (
         "split=2[cam][game];"
         f"[cam]crop={cam_w}:{cam_h}:{cam_x}:{cam_y},"
-        f"scale=1080:{STREAMER_CAM_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"scale=1080:{STREAMER_CAM_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS},"
         f"crop=1080:{STREAMER_CAM_HEIGHT},setsar=1[ctop];"
         f"[game]crop={game_w}:{game_h}:{game_x}:{game_y},"
-        f"scale=1080:{STREAMER_GAME_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"scale=1080:{STREAMER_GAME_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS},"
         f"crop=1080:{STREAMER_GAME_HEIGHT},setsar=1[gbot];"
         "[ctop][gbot]vstack=inputs=2,setsar=1"
     )
 
 
 def streamer_crop_filter(video_path: Path, clip: ClipCandidate, cam_corner: str) -> str:
-    center_filter = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+    center_filter = CENTER_CROP_FILTER
     size = get_video_size(video_path)
     if size is None:
         console.print(f"[yellow]Streamer layout unavailable for clip {clip.index}; using center crop.[/yellow]")
@@ -472,6 +483,50 @@ def fetch_metadata(url: str) -> dict:
         return sanitize_metadata(ydl.extract_info(url, download=False))
 
 
+# The output canvas is 1080x1920. A 9:16 crop of a 16:9 frame keeps only ~56% of
+# its width, so a 1080p source leaves ~608x1080 real pixels that then get upscaled
+# 1.78x to fill the canvas. Pull the highest source available (up to 4K) so the crop
+# has real detail to work with instead of interpolated pixels.
+MAX_SOURCE_HEIGHT = int(os.environ.get("SULTANCLIP_MAX_SOURCE_HEIGHT", "2160"))
+
+
+# Resolution first, then h264/mp4 among formats of equal size: an "[ext=mp4]"
+# filter would silently settle for 1080p whenever the 4K rendition is webm.
+SOURCE_FORMAT_SORT = ["res", "vcodec:h264", "ext:mp4:m4a"]
+
+
+def source_format_ladder(max_height: int) -> str:
+    # AV1 is skipped on the first try because OpenCV (used for the person and
+    # streamer crops) often cannot decode it; the second entry still accepts it
+    # rather than failing. Progressive ("best") formats top out at 720p on
+    # YouTube, so they stay last: a fallback, never the first choice.
+    return (
+        f"bestvideo[height<={max_height}][vcodec!^=av01]+bestaudio[ext=m4a]/"
+        f"bestvideo[height<={max_height}][vcodec!^=av01]+bestaudio/"
+        f"bestvideo[height<={max_height}]+bestaudio/"
+        f"best[height<={max_height}]/"
+        "bestvideo+bestaudio/"
+        "best"
+    )
+
+
+def report_source_resolution(info: dict, video_path: Path | None = None) -> None:
+    width = info.get("width")
+    height = info.get("height")
+    if (not width or not height) and video_path is not None:
+        size = get_video_size(video_path)
+        if size is not None:
+            width, height = size
+    if not width or not height:
+        return
+    console.print(f"[green]Source video:[/green] {width}x{height}")
+    if height < 1920:
+        console.print(
+            f"[yellow]Source height is {height}px; a 9:16 crop has to upscale "
+            f"~{1920 / height:.2f}x to fill 1080x1920.[/yellow]"
+        )
+
+
 def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path, dict]:
     info_path = work_dir / "metadata.json"
     existing = sorted(work_dir.glob("source.*"))
@@ -480,12 +535,8 @@ def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path,
 
     ydl_opts = {
         **_ydl_base_opts(),
-        "format": (
-            "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/"
-            "bestvideo[height<=1080]+bestaudio/"
-            "best[height<=1080]/"
-            "best"
-        ),
+        "format": source_format_ladder(MAX_SOURCE_HEIGHT),
+        "format_sort": SOURCE_FORMAT_SORT,
         "outtmpl": str(work_dir / "source.%(ext)s"),
         "merge_output_format": "mp4",
         "ffmpeg_location": ffmpeg_path(),
@@ -502,7 +553,6 @@ def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path,
         fallback_opts = {
             **ydl_opts,
             "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
-            "format": "best",
         }
         with YoutubeDL(fallback_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -515,6 +565,7 @@ def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path,
         file_path = downloaded[0]
 
     save_json(info_path, sanitize_metadata(info))
+    report_source_resolution(info, file_path)
     return file_path, sanitize_metadata(info)
 
 
@@ -948,7 +999,7 @@ def build_watermark_filter(wm: WatermarkStyle, clips_dir: Path) -> str:
         scale_f = max(1, min(500, wm.scale)) / 100.0
         fc = (
             f"[0:v]null[vid];"
-            f"[1:v]scale=iw*{scale_f:.4f}:ih*{scale_f:.4f},"
+            f"[1:v]scale=iw*{scale_f:.4f}:ih*{scale_f:.4f}:flags={SCALE_FLAGS},"
             f"format=rgba,colorchannelmixer=aa={opacity:.4f}[wm];"
             f"[vid][wm]overlay={x_expr}:{y_expr}"
         )
@@ -1189,6 +1240,10 @@ def export_clip(
         str(video_path.resolve()),
     ]
 
+    # Encoder settings are shared by both paths below: High profile (CABAC + the
+    # 8x8 transform, which baseline lacks and fine text needs), no pinned -level so
+    # x264 tags the level the clip actually conforms to, and the "medium" preset,
+    # which keeps detail that "veryfast" discards.
     if use_filter_complex:
         fc_expr = wm_filter[len("_fc:"):]
         video_pass_cmd = [
@@ -1203,11 +1258,9 @@ def export_clip(
             "-c:v",
             "libx264",
             "-profile:v",
-            "baseline",
-            "-level",
-            "4.0",
+            "high",
             "-preset",
-            "veryfast",
+            "medium",
             "-crf",
             "18",
             "-pix_fmt",
@@ -1226,11 +1279,9 @@ def export_clip(
             "-c:v",
             "libx264",
             "-profile:v",
-            "baseline",
-            "-level",
-            "4.0",
+            "high",
             "-preset",
-            "veryfast",
+            "medium",
             "-crf",
             "18",
             "-pix_fmt",
@@ -1357,6 +1408,7 @@ def prepare_uploaded_source(source_file: Path, work_dir: Path) -> tuple[Path, di
         "webpage_url": None,
         "ext": suffix.lstrip("."),
     }
+    report_source_resolution(metadata, source_file)
     return source_file, metadata
 
 
