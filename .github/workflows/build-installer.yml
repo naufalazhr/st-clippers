@@ -2,7 +2,16 @@ name: Build Installer
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to publish a GitHub release for (e.g. v0.1.1). Leave empty to only build."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -101,3 +110,12 @@ jobs:
             desktop/src-tauri/target/**/bundle/msi/*.msi
             desktop/src-tauri/target/**/bundle/nsis/*.exe
           if-no-files-found: error
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: |
+            desktop/src-tauri/target/**/bundle/dmg/*.dmg
+            desktop/src-tauri/target/**/bundle/msi/*.msi
+            desktop/src-tauri/target/**/bundle/nsis/*.exe
