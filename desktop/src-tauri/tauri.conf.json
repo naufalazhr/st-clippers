@@ -1,6 +1,6 @@
 {
   "productName": "Sultan Clip",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "identifier": "com.sultantech.sultanclip",
   "build": {
     "frontendDist": "../../frontend/out",
