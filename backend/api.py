@@ -168,10 +168,27 @@ class ClipJob(BaseModel):
     work_dir: str | None = None
 
 
+# The packaged webview origin differs per platform:
+#   macOS   -> tauri://localhost
+#   Windows -> http://tauri.localhost (https://tauri.localhost when useHttpsScheme is on)
+#   Linux   -> http://tauri.localhost
+# Every origin has to be allowed, otherwise the webview blocks the response and
+# fetch() rejects with "Failed to fetch".
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+]
+# Dev servers do not always land on port 3000; allow any loopback origin.
+ALLOWED_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
 app = FastAPI(title="Sultan Clip API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "tauri://localhost", "https://tauri.localhost"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

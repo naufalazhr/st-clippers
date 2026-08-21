@@ -4,7 +4,14 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 mod menu;
+
+/// Windows CREATE_NO_WINDOW: the backend is a console app, so without this flag a
+/// console window pops up next to the app and closing it kills the backend.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 struct BackendProcess {
     child: Mutex<Option<Child>>,
@@ -63,17 +70,25 @@ fn spawn_backend(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let mut child = Command::new(&backend_exe)
+    let mut command = Command::new(&backend_exe);
+    command
         .args(["--port", "8010"])
         .current_dir(&backend_dir)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = command.spawn()?;
 
     let stdout = child
         .stdout
         .take()
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stderr"))?;
 
     let handle = app.handle().clone();
     *app.state::<BackendProcess>().child.lock().unwrap() = Some(child);
@@ -94,6 +109,22 @@ fn spawn_backend(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Err(e) => {
                     eprintln!("[tauri] Error reading backend stdout: {}", e);
+                    break;
+                }
+            }
+        }
+    });
+
+    // Uvicorn writes its access log to stderr. Nothing reads it, so once the OS
+    // pipe buffer fills the backend blocks on write and stops serving requests
+    // (every fetch then fails). Drain it and mirror it to our own stderr.
+    std::thread::spawn(move || {
+        let reader = std::io::BufReader::new(stderr);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => eprintln!("[backend] {}", line),
+                Err(e) => {
+                    eprintln!("[tauri] Error reading backend stderr: {}", e);
                     break;
                 }
             }
