@@ -19,9 +19,14 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from llm import AIConfig, chat_completion, extract_json
+from safe_path import prune_unresolvable_path_entries
 
 
 console = Console()
+
+# Must run before the first yt-dlp extraction; see safe_path for why.
+for _dropped in prune_unresolvable_path_entries():
+    console.print(f"[yellow]Ignoring unreadable PATH entry:[/yellow] {_dropped}")
 
 
 def frozen_base() -> Path:

@@ -18,7 +18,7 @@ a = Analysis(
         "uvicorn.protocols.websockets", "uvicorn.protocols.websockets.auto",
         "uvicorn.lifespan", "uvicorn.lifespan.on",
         "faster_whisper", "ctranslate2", "yt_dlp", "multipart",
-        "clipper", "model_cache", "llm",
+        "clipper", "model_cache", "llm", "safe_path",
     ],
     excludes=["torch", "nvidia", "nvidia.cublas", "nvidia.cudnn", "tkinter", "unittest", "pydoc"],
     noarchive=False,
