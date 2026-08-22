@@ -19,9 +19,14 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from llm import AIConfig, chat_completion, extract_json
+from safe_path import prune_unresolvable_path_entries
 
 
 console = Console()
+
+# Must run before the first yt-dlp extraction; see safe_path for why.
+for _dropped in prune_unresolvable_path_entries():
+    console.print(f"[yellow]Ignoring unreadable PATH entry:[/yellow] {_dropped}")
 
 
 def frozen_base() -> Path:
@@ -453,24 +458,21 @@ def clean_transcript_text(text: str) -> str:
 
 
 def _ydl_base_opts() -> dict:
-    """Options that reduce YouTube 403s for frozen/desktop builds."""
+    """Base yt-dlp options shared by every extraction.
+
+    Do NOT force a player_client list or override the User-Agent here. Both
+    were once added to reduce 403s, but yt-dlp's YouTube extractor now discards
+    formats those clients can no longer serve: with the forced list, every
+    rendition above 360p disappeared and each source was downloaded at 640x360,
+    then upscaled ~5.3x — the root cause of blurry clips. yt-dlp's defaults
+    keep the full format list; the 403 fallback in download_video switches
+    clients only when a download actually fails.
+    """
     return {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
         "noprogress": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "ios", "web", "mweb", "tv"],
-            }
-        },
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            ),
-        },
         "retries": 10,
         "fragment_retries": 10,
         "file_access_retries": 3,
@@ -490,9 +492,23 @@ def fetch_metadata(url: str) -> dict:
 MAX_SOURCE_HEIGHT = int(os.environ.get("SULTANCLIP_MAX_SOURCE_HEIGHT", "2160"))
 
 
-# Resolution first, then h264/mp4 among formats of equal size: an "[ext=mp4]"
-# filter would silently settle for 1080p whenever the 4K rendition is webm.
-SOURCE_FORMAT_SORT = ["res", "vcodec:h264", "ext:mp4:m4a"]
+# Resolution first, then bitrate, then h264/mp4 as tiebreakers. Without "tbr",
+# equal-resolution variants fall through to yt-dlp's default keys, which picked
+# YouTube's 508 kbps 1080p DASH stream over the 2078 kbps 1080p variant — a 4x
+# quality loss before the pipeline even starts. An "[ext=mp4]" filter would
+# likewise silently settle for 1080p whenever the 4K rendition is webm.
+SOURCE_FORMAT_SORT = ["res", "tbr", "vcodec:h264", "ext:mp4:m4a"]
+
+# The fallback prefers plain https DASH streams ("proto" ranks https above
+# m3u8): the high-bitrate variants are often m3u8 and are the likely culprits
+# when the primary download fails.
+CONSERVATIVE_FORMAT_SORT = ["res", "vcodec:h264", "ext:mp4:m4a", "proto"]
+
+# Stamped into metadata.json alongside each download. A cached source is only
+# reused when its stamp matches, so caches made under older, lower-quality
+# settings re-download instead of silently masking every quality fix.
+# Bump "version" whenever the ladder or sort changes materially.
+DOWNLOAD_PROFILE = {"version": 2, "max_height": MAX_SOURCE_HEIGHT}
 
 
 def source_format_ladder(max_height: int) -> str:
@@ -511,15 +527,21 @@ def source_format_ladder(max_height: int) -> str:
 
 
 def report_source_resolution(info: dict, video_path: Path | None = None) -> None:
-    width = info.get("width")
-    height = info.get("height")
+    video_fmt = (info.get("requested_formats") or [info])[0]
+    width = info.get("width") or video_fmt.get("width")
+    height = info.get("height") or video_fmt.get("height")
     if (not width or not height) and video_path is not None:
         size = get_video_size(video_path)
         if size is not None:
             width, height = size
     if not width or not height:
         return
-    console.print(f"[green]Source video:[/green] {width}x{height}")
+    detail = ""
+    if format_id := video_fmt.get("format_id"):
+        detail += f" format={format_id}"
+    if tbr := video_fmt.get("tbr"):
+        detail += f" ~{round(tbr)}kbps"
+    console.print(f"[green]Source video:[/green] {width}x{height}{detail}")
     if height < 1920:
         console.print(
             f"[yellow]Source height is {height}px; a 9:16 crop has to upscale "
@@ -527,11 +549,32 @@ def report_source_resolution(info: dict, video_path: Path | None = None) -> None
         )
 
 
+def reuse_cached_source(work_dir: Path, info_path: Path) -> tuple[Path, dict] | None:
+    """Return the cached download only if it was made under the current profile."""
+    existing = sorted(work_dir.glob("source.*"))
+    if not existing or not info_path.exists():
+        return None
+    meta = load_json(info_path)
+    if meta.get("download_profile") != DOWNLOAD_PROFILE:
+        console.print(
+            "[yellow]Cached source predates the current download settings; "
+            "re-downloading.[/yellow]"
+        )
+        for stale in existing:
+            stale.unlink(missing_ok=True)
+        return None
+    size = get_video_size(existing[0])
+    if size is not None:
+        console.print(f"[green]Reusing cached source:[/green] {size[0]}x{size[1]}")
+    return existing[0], meta
+
+
 def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path, dict]:
     info_path = work_dir / "metadata.json"
-    existing = sorted(work_dir.glob("source.*"))
-    if existing and info_path.exists() and not force:
-        return existing[0], load_json(info_path)
+    if not force:
+        cached = reuse_cached_source(work_dir, info_path)
+        if cached is not None:
+            return cached
 
     ydl_opts = {
         **_ydl_base_opts(),
@@ -548,11 +591,17 @@ def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path,
             info = ydl.extract_info(url, download=True)
             file_path = Path(ydl.prepare_filename(info))
     except DownloadError as exc:
-        if "403" not in str(exc):
-            raise
+        # Covers 403s (fixed by switching player client) and flaky high-bitrate
+        # m3u8 streams (avoided by preferring plain https DASH). Never fall back
+        # to bare "best": it is progressive-only and can fail outright.
+        console.print(
+            f"[yellow]Download failed ({exc}); retrying with conservative "
+            "settings.[/yellow]"
+        )
         fallback_opts = {
             **ydl_opts,
             "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
+            "format_sort": CONSERVATIVE_FORMAT_SORT,
         }
         with YoutubeDL(fallback_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -564,9 +613,11 @@ def download_video(url: str, work_dir: Path, force: bool = False) -> tuple[Path,
             raise FileNotFoundError("Downloaded video was not found.")
         file_path = downloaded[0]
 
-    save_json(info_path, sanitize_metadata(info))
+    meta = sanitize_metadata(info)
+    meta["download_profile"] = DOWNLOAD_PROFILE
+    save_json(info_path, meta)
     report_source_resolution(info, file_path)
-    return file_path, sanitize_metadata(info)
+    return file_path, meta
 
 
 def sanitize_metadata(info: dict) -> dict:

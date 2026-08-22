@@ -62,23 +62,32 @@ def test_encoder_uses_high_profile_without_a_level_bitrate_ceiling():
 
 
 def _select(format_spec, formats, format_sort=None):
-    """Resolve a format spec against fake formats, offline."""
+    """Resolve a format spec against fake formats, offline.
+
+    Must go through process_video_result: format_sort is applied there, not in
+    build_format_selector, so calling the selector directly would silently test
+    yt-dlp's default ordering instead of ours.
+    """
     from yt_dlp import YoutubeDL
 
-    opts = {"quiet": True, "no_warnings": True, "simulate": True}
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "simulate": True,
+        "format": format_spec,
+    }
     if format_sort:
         opts["format_sort"] = format_sort
-    ydl = YoutubeDL(opts)
-    selector = getattr(ydl, "build_format_selector", None)
-    if selector is None:  # yt-dlp internals moved; nothing to assert against
-        import pytest
-
-        pytest.skip("yt_dlp.build_format_selector is unavailable")
-    chosen = list(selector(format_spec)({"formats": formats, "incomplete_formats": {}}))
-    picked = []
-    for result in chosen:
-        picked += result.get("requested_formats") or [result]
-    return picked
+    info = {
+        "id": "t",
+        "title": "t",
+        "formats": formats,
+        "extractor": "generic",
+        "extractor_key": "Generic",
+        "webpage_url": "http://example.invalid",
+    }
+    result = YoutubeDL(opts).process_video_result(info, download=False)
+    return result.get("requested_formats") or [result]
 
 
 def _fmt(format_id, height, vcodec, ext, acodec="none"):
@@ -135,3 +144,23 @@ def test_selection_is_capped_and_unchanged_for_a_1080p_only_video():
     over_cap = [*formats, _fmt("571", 4320, "vp9", "webm")]
     picked = _select(source_format_ladder(2160), over_cap, clipper.SOURCE_FORMAT_SORT)
     assert picked[0]["height"] <= 2160
+
+
+def test_higher_bitrate_wins_at_equal_resolution():
+    # YouTube offers a 508 kbps and a 2078 kbps 1080p variant of the same video;
+    # without "tbr" in the sort, the starved one won.
+    starved = {**_fmt("137", 1080, "avc1", "mp4"), "tbr": 508}
+    rich = {**_fmt("270", 1080, "avc1", "mp4"), "tbr": 2078, "protocol": "m3u8_native"}
+    picked = _select(
+        source_format_ladder(2160), [starved, rich, M4A], clipper.SOURCE_FORMAT_SORT
+    )
+    assert picked[0]["format_id"] == "270"
+
+
+def test_conservative_sort_prefers_https_at_equal_resolution():
+    starved = {**_fmt("137", 1080, "avc1", "mp4"), "tbr": 508, "protocol": "https"}
+    rich = {**_fmt("270", 1080, "avc1", "mp4"), "tbr": 2078, "protocol": "m3u8_native"}
+    picked = _select(
+        source_format_ladder(2160), [starved, rich, M4A], clipper.CONSERVATIVE_FORMAT_SORT
+    )
+    assert picked[0]["format_id"] == "137"

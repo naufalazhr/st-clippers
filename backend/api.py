@@ -24,6 +24,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from yt_dlp import YoutubeDL
 
+from safe_path import prune_unresolvable_path_entries
+
+
+# Must run before the first yt-dlp extraction; see safe_path for why.
+for _dropped in prune_unresolvable_path_entries():
+    print(f"[api] Ignoring unreadable PATH entry: {_dropped}", flush=True)
 
 BASE_DIR = Path(__file__).resolve().parent
 
