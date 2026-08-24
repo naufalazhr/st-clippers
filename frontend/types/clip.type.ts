@@ -8,6 +8,8 @@ export type CaptionFont =
   | "Liberation Sans"
   | "Liberation Serif"
   | "Noto Sans";
+export type CaptionStyle = "classic" | "bold" | "boxed" | "highlight" | "shadow";
+export type Transition = "none" | "fade" | "fadeblack" | "fadewhite";
 export type SourceMode = "url" | "upload";
 
 export type ClipFile = {
@@ -59,6 +61,8 @@ export type ClipJob = {
     caption_font: CaptionFont;
     caption_outline: number;
     caption_outline_color: string;
+    caption_style?: CaptionStyle;
+    transition?: Transition;
     ai_enabled: boolean;
     ai_base_url: string;
     ai_model: string;
@@ -83,6 +87,8 @@ export type CreateClipJobInput = {
   caption_font?: CaptionFont;
   caption_outline?: number;
   caption_outline_color?: string;
+  caption_style?: CaptionStyle;
+  transition?: Transition;
   required_hashtags?: string[];
   ai_enabled?: boolean;
   ai_base_url?: string;

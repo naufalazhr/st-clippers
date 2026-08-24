@@ -11,6 +11,7 @@ const mockTimeline: TimelineData = {
   duration: 120,
   segments: [{ start: 0, end: 10, text: "hello" }],
   candidates: [],
+  peaks: [],
 };
 
 const mockClip: ClipFile = {

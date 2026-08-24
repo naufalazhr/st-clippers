@@ -1192,6 +1192,17 @@ def write_srt(path: Path, segments: list[TranscriptSegment], offset: float, clip
 
 
 CaptionPosition = Literal["center", "bottom"]
+CaptionStylePreset = Literal["classic", "bold", "boxed", "highlight", "shadow"]
+CAPTION_STYLE_PRESETS: tuple[str, ...] = ("classic", "bold", "boxed", "highlight", "shadow")
+
+# Fade transitions applied at clip start/end. The fade filters are appended
+# after the subtitles filter so burned-in captions fade with the picture.
+TransitionKind = Literal["none", "fade", "fadeblack", "fadewhite"]
+TRANSITIONS: tuple[str, ...] = ("none", "fade", "fadeblack", "fadewhite")
+FADE_DURATION_SECONDS = 0.5
+# Clips shorter than this skip the fade-out entirely; a 0.5s out-fade would
+# dominate such a short clip.
+MIN_FADE_OUT_DURATION = 1.2
 
 
 # Fonts installed in the backend container (see Dockerfile). Map the FE choice
@@ -1216,17 +1227,20 @@ class CaptionStyle:
     font_family: str = DEFAULT_FONT
     outline_width: float = 2.0
     outline_color: str = "#000000"
+    style: CaptionStylePreset = "classic"
 
 
-def _hex_to_ass_color(hex_color: str) -> str:
+def _hex_to_ass_color(hex_color: str, opacity: float = 1.0) -> str:
     value = hex_color.strip().lstrip("#")
     if len(value) == 3:
         value = "".join(ch * 2 for ch in value)
     if len(value) != 6:
         return "&H00FFFFFF"
     red, green, blue = value[0:2], value[2:4], value[4:6]
-    # ASS uses &HAABBGGRR (alpha first, then BGR).
-    return f"&H00{blue}{green}{red}".upper()
+    # ASS uses &HAABBGGRR (alpha first, then BGR). Alpha 00 is opaque and FF is
+    # fully transparent, so opacity maps inversely onto the leading byte.
+    alpha = max(0, min(255, round((1.0 - opacity) * 255)))
+    return f"&H{alpha:02X}{blue}{green}{red}".upper()
 
 
 def build_subtitle_style(caption: CaptionStyle) -> str:
@@ -1245,9 +1259,25 @@ def build_subtitle_style(caption: CaptionStyle) -> str:
     else:
         alignment = 10
         margin_v = 0
+    preset = caption.style if caption.style in CAPTION_STYLE_PRESETS else "classic"
+    if preset in ("boxed", "highlight"):
+        # BorderStyle=3 draws an opaque box behind the text using BackColour.
+        # ASS alpha is inverted (00 = opaque), so a 60%/40% opaque box becomes
+        # alpha 0x66/0x99. Outline doubles as the box padding, hence 0, and no
+        # drop shadow on top of a box.
+        box_opacity = 0.6 if preset == "boxed" else 0.4
+        back_colour = _hex_to_ass_color(caption.outline_color, opacity=box_opacity)
+        tail = f"BackColour={back_colour},BorderStyle=3,Outline=0,Shadow=0,"
+    elif preset == "bold":
+        outline = min(8.0, outline + 1.0)
+        tail = f"BorderStyle=1,Outline={outline},Shadow=1,"
+    elif preset == "shadow":
+        tail = "BorderStyle=1,Outline=1,Shadow=2,"
+    else:  # classic
+        tail = f"BorderStyle=1,Outline={outline},Shadow=1,"
     return (
         f"FontName={font_name},FontSize={font_size},Bold=1,PrimaryColour={primary},"
-        f"OutlineColour={outline_color},BorderStyle=1,Outline={outline},Shadow=1,"
+        f"OutlineColour={outline_color},{tail}"
         f"Alignment={alignment},MarginL=60,MarginR=60,MarginV={margin_v}"
     )
 
@@ -1480,6 +1510,28 @@ def generate_social_caption(
     return text[:2000]
 
 
+def build_transition_filter(transition: str, duration: float) -> str:
+    """ffmpeg fade chain for a clip of `duration` seconds; "" when disabled.
+
+    fadeblack/fadewhite pass an explicit :color so both fades hit black/white.
+    Clips shorter than MIN_FADE_OUT_DURATION only get the fade-in, otherwise
+    the out-fade would dominate the clip.
+    """
+    kind = transition if transition in TRANSITIONS else "none"
+    if kind == "none":
+        return ""
+    color_suffix = ""
+    if kind == "fadeblack":
+        color_suffix = ":color=black"
+    elif kind == "fadewhite":
+        color_suffix = ":color=white"
+    parts = [f"fade=t=in:st=0:d={FADE_DURATION_SECONDS}{color_suffix}"]
+    if duration >= MIN_FADE_OUT_DURATION:
+        out_start = max(0.0, duration - FADE_DURATION_SECONDS)
+        parts.append(f"fade=t=out:st={out_start:.3f}:d={FADE_DURATION_SECONDS}{color_suffix}")
+    return ",".join(parts)
+
+
 def export_clip(
     video_path: Path,
     clip: ClipCandidate,
@@ -1492,6 +1544,7 @@ def export_clip(
     cam_corner: str = "auto",
     required_hashtags: list[str] | None = None,
     watermark: WatermarkStyle | None = None,
+    transition: str = "none",
 ) -> Path:
     clips_dir.mkdir(parents=True, exist_ok=True)
     base_name = f"clip_{clip.index:02}_{slugify(clip.title)[:42] or 'auto'}"
@@ -1520,6 +1573,12 @@ def export_clip(
             ":original_size=1080x1920"
             f":force_style='{style}'"
         )
+
+    # Fades go after the subtitles filter so burned captions fade with the
+    # picture; the watermark (applied later) stays visible throughout.
+    transition_filter = build_transition_filter(transition, duration)
+    if transition_filter:
+        vf = f"{vf},{transition_filter}" if vf else transition_filter
 
     wm_filter = build_watermark_filter(watermark, clips_dir) if watermark else ""
     use_filter_complex = wm_filter.startswith("_fc:")
@@ -1770,6 +1829,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--caption-font", default=DEFAULT_FONT, help="Burned caption font family")
     parser.add_argument("--caption-outline", type=float, default=2.0, help="Caption border/outline width (0-8)")
     parser.add_argument("--caption-outline-color", default="#000000", help="Caption border color, hex")
+    parser.add_argument(
+        "--caption-style",
+        choices=list(CAPTION_STYLE_PRESETS),
+        default="classic",
+        help="Caption preset: classic, bold, boxed (opaque box), highlight (translucent box), shadow",
+    )
+    parser.add_argument(
+        "--transition",
+        choices=list(TRANSITIONS),
+        default="none",
+        help="Fade transition at clip start/end: none, fade, fadeblack, fadewhite",
+    )
     parser.add_argument("--watermark-text", default="", help="Text watermark to overlay on clips")
     parser.add_argument("--watermark-image", default="", help="Absolute path to PNG watermark image")
     parser.add_argument("--watermark-position", default="bottom-right", help="Watermark position key")
@@ -1881,6 +1952,7 @@ def main() -> int:
         font_family=args.caption_font,
         outline_width=args.caption_outline,
         outline_color=args.caption_outline_color,
+        style=args.caption_style,
     )
 
     wm: WatermarkStyle | None = None
@@ -1917,6 +1989,7 @@ def main() -> int:
                 args.cam_corner,
                 required_hashtags,
                 wm,
+                transition=args.transition,
             )
         )
 

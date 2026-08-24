@@ -15,6 +15,8 @@ export const CAPTION_FONT_SIZE_MAX = 60;
 export const DEFAULT_CAPTION_FONT = "DejaVu Sans";
 export const DEFAULT_CAPTION_OUTLINE = 2;
 export const DEFAULT_CAPTION_OUTLINE_COLOR = "#000000";
+export const DEFAULT_CAPTION_STYLE = "classic";
+export const DEFAULT_TRANSITION = "none";
 // Maps backend font family -> a CSS stack for the live preview.
 export const CAPTION_FONTS = [
   { value: "DejaVu Sans", label: "DejaVu Sans", css: '"DejaVu Sans", system-ui, sans-serif' },

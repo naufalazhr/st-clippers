@@ -10,6 +10,7 @@ import { HashtagsSection } from "../sections/HashtagsSection";
 import { JobFooter } from "../sections/JobFooter";
 import { RangeSection } from "../sections/RangeSection";
 import { SourceSection } from "../sections/SourceSection";
+import { TransitionSection } from "../sections/TransitionSection";
 import { WatermarkSection } from "../sections/WatermarkSection";
 import "./InspectorPanel.css";
 
@@ -89,6 +90,7 @@ export function InspectorPanel(props: ControlPanelProps) {
             captionFont={props.captionFont}
             captionOutline={props.captionOutline}
             captionOutlineColor={props.captionOutlineColor}
+            captionStyle={props.captionStyle}
             onCropModeChange={props.onCropModeChange}
             onCamCornerChange={props.onCamCornerChange}
             onBurnSubtitlesChange={props.onBurnSubtitlesChange}
@@ -98,6 +100,14 @@ export function InspectorPanel(props: ControlPanelProps) {
             onCaptionFontChange={props.onCaptionFontChange}
             onCaptionOutlineChange={props.onCaptionOutlineChange}
             onCaptionOutlineColorChange={props.onCaptionOutlineColorChange}
+            onCaptionStyleChange={props.onCaptionStyleChange}
+          />
+        </CollapseGroup>
+
+        <CollapseGroup title="Efek Transisi" defaultOpen={false}>
+          <TransitionSection
+            transition={props.transition}
+            onTransitionChange={props.onTransitionChange}
           />
         </CollapseGroup>
 

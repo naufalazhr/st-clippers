@@ -641,12 +641,292 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 50%;
+  flex: 1;
   min-height: 48px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
   background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  text-decoration: none;
+  transition: var(--transition-fast);
+}
+
+.clipActions a:last-child,
+.clipActions button:last-child {
+  border-right: none;
+}
+
+.clipActions a:hover, .clipActions button:hover {
+  background: var(--panel-hover);
+  color: var(--primary);
+}
+
+/* ── Caption style picker ── */
+.captionStylePicker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.captionStyleChip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-base);
+  flex: 1;
+  min-width: 70px;
+}
+
+.captionStyleChip:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.captionStyleChip--active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.captionStylePreview {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.captionStylePreview--classic {
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+
+.captionStylePreview--bold {
+  text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+               -1px 0 0 #000, 1px 0 0 #000, 0 -1px 0 #000, 0 1px 0 #000;
+}
+
+.captionStylePreview--boxed {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.captionStylePreview--highlight {
+  background: rgba(255, 255, 0, 0.3);
+  padding: 2px 6px;
+  font-weight: 800;
+}
+
+.captionStylePreview--shadow {
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.captionStyleLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.captionStyleChip--active .captionStyleLabel {
+  color: var(--primary);
+}
+
+/* ── Transition picker ── */
+.transitionPicker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.transitionChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-base);
+  flex: 1;
+  min-width: 90px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  justify-content: center;
+}
+
+.transitionChip:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.transitionChip--active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.transitionIcon {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+/* ── Edit caption modal ── */
+.editCaptionModal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  padding: 20px;
+}
+
+.editCaptionModal {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+
+.editCaptionModal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editCaptionModal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.editCaptionModal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.editCaptionModal-section {
+  margin-bottom: 20px;
+}
+
+.editCaptionModal-section:last-child {
+  margin-bottom: 0;
+}
+
+.editCaptionModal-sectionTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.editCaptionSegmentList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.editCaptionSegment {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.editCaptionSegment-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.editCaptionSegment textarea {
+  width: 100%;
+  min-height: 50px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.editCaptionSegment textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.editCaptionModal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.editCaptionModal-footer button {
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-base);
+  border: none;
+}
+
+.editCaptionModal-btnCancel {
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.editCaptionModal-btnCancel:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.editCaptionModal-btnSave {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.editCaptionModal-btnSave:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-glow);
+}
+
+.editCaptionModal-btnSave:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Clip action buttons ── */
+.clipActions a, .clipActions button {
   border: none;
   cursor: pointer;
   padding: 0;

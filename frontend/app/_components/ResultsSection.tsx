@@ -1,8 +1,9 @@
-import { Clipboard, Download, ExternalLink, Scissors, Video } from "lucide-react";
+import { Clipboard, Download, Edit3, ExternalLink, Scissors, Video } from "lucide-react";
 import { useState, useCallback } from "react";
 import { getOutputUrl, getTimeline, recutClip } from "../../lib/apiClient";
 import { clipTitle, handleCopyTitle, handleDownload } from "../../lib/utils";
 import type { ClipFile, ClipJob, ClipCandidate, TimelineData } from "../../types/clip.type";
+import { EditCaptionDialog } from "./EditCaptionDialog";
 import { ThumbnailPrompt } from "./ThumbnailPrompt";
 import { TimelineEditor } from "./TimelineEditor";
 
@@ -15,6 +16,7 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
   const clips = job?.clips ?? [];
   const [expandedIndex, setExpandedIndex] = useState(-1);
   const [timelineCache, setTimelineCache] = useState<Record<string, TimelineData>>({});
+  const [editCaptionClip, setEditCaptionClip] = useState<string | null>(null);
 
   const handleEditClip = useCallback(async (clipName: string, jobId: string) => {
     const match = clipName.match(/^clip_(\d+)_/);
@@ -48,6 +50,14 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
     const idx = parseInt(match[1], 10);
     return job.candidates?.some((c) => c.index === idx) ?? false;
   };
+
+  const handleEditCaption = useCallback((clipName: string) => {
+    setEditCaptionClip(clipName);
+  }, []);
+
+  const handleEditCaptionSuccess = useCallback(() => {
+    onJobRefresh();
+  }, [onJobRefresh]);
 
   return (
     <section className="results">
@@ -96,10 +106,16 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
                     Unduh
                   </button>
                   {hasEditBtn && (
-                    <button type="button" onClick={() => handleEditClip(clip.name, job!.id)}>
-                      <Scissors size={16} />
-                      Edit Trim
-                    </button>
+                    <>
+                      <button type="button" onClick={() => handleEditClip(clip.name, job!.id)}>
+                        <Scissors size={16} />
+                        Edit Trim
+                      </button>
+                      <button type="button" onClick={() => handleEditCaption(clip.name)}>
+                        <Edit3 size={16} />
+                        Edit Caption
+                      </button>
+                    </>
                   )}
                 </div>
                 <ThumbnailPrompt clip={clip} />
@@ -121,6 +137,16 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
           <Video className="emptyStateIcon" size={32} />
           <p>Klip vertikal 9:16 yang selesai diproses akan muncul di sini.</p>
         </div>
+      )}
+
+      {job && editCaptionClip && (
+        <EditCaptionDialog
+          open={true}
+          clipName={editCaptionClip}
+          job={job}
+          onClose={() => setEditCaptionClip(null)}
+          onSuccess={handleEditCaptionSuccess}
+        />
       )}
     </section>
   );

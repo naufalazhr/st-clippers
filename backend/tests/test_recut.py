@@ -291,6 +291,136 @@ def test_recut_caption_falls_back_to_job_request(tmp_path):
     assert captured["caption"].font_size == 55
 
 
+def test_recut_style_and_transition_overrides(tmp_path):
+    import json as _json
+
+    work_dir = tmp_path / "style-slug"
+    (work_dir / "clips").mkdir(parents=True)
+    (work_dir / "source.mp4").write_bytes(b"fake")
+    (work_dir / "transcript.json").write_text(
+        _json.dumps([{"start": 0.0, "end": 5.0, "text": "hi"}]), encoding="utf-8"
+    )
+
+    with jobs_lock:
+        jobs["style_test"] = ClipJob(
+            id="style_test",
+            status="completed",
+            request=ClipJobRequest(url="https://youtu.be/x", caption_style="classic", transition="none"),
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            candidates=[ClipCandidate(index=0, start=0, end=10, duration=10, score=50, title="T", reason="R", text="hi")],
+            work_dir="style-slug",
+        )
+
+    captured: dict = {}
+
+    def fake_export(**kwargs):
+        captured["caption"] = kwargs["caption"]
+        captured["transition"] = kwargs["transition"]
+        out = tmp_path / "style-slug" / "clips" / "clip_00_t.mp4"
+        out.write_bytes(b"fake")
+        return out
+
+    import api as api_module
+    real_outputs_dir = api_module.OUTPUTS_DIR
+    try:
+        api_module.OUTPUTS_DIR = tmp_path
+        with (
+            unittest.mock.patch("clipper.export_clip", side_effect=fake_export),
+            unittest.mock.patch("api.probe_media_duration", return_value=20.0),
+        ):
+            from api import recut_clip, RecutRequest
+            rr = RecutRequest(index=0, start=0, end=10, caption_style="boxed", transition="fade")
+            recut_clip(jobs["style_test"], 0, 0.0, 10.0, None, rr)
+    finally:
+        api_module.OUTPUTS_DIR = real_outputs_dir
+
+    assert captured["caption"].style == "boxed"
+    assert captured["transition"] == "fade"
+
+
+def test_recut_style_and_transition_fall_back_to_job_request(tmp_path):
+    import json as _json
+
+    work_dir = tmp_path / "fallback-slug"
+    (work_dir / "clips").mkdir(parents=True)
+    (work_dir / "source.mp4").write_bytes(b"fake")
+    (work_dir / "transcript.json").write_text(
+        _json.dumps([{"start": 0.0, "end": 5.0, "text": "hi"}]), encoding="utf-8"
+    )
+
+    with jobs_lock:
+        jobs["fallback_test"] = ClipJob(
+            id="fallback_test",
+            status="completed",
+            request=ClipJobRequest(url="https://youtu.be/x", caption_style="shadow", transition="fadeblack"),
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            candidates=[ClipCandidate(index=0, start=0, end=10, duration=10, score=50, title="T", reason="R", text="hi")],
+            work_dir="fallback-slug",
+        )
+
+    captured: dict = {}
+
+    def fake_export(**kwargs):
+        captured["caption"] = kwargs["caption"]
+        captured["transition"] = kwargs["transition"]
+        out = tmp_path / "fallback-slug" / "clips" / "clip_00_t.mp4"
+        out.write_bytes(b"fake")
+        return out
+
+    import api as api_module
+    real_outputs_dir = api_module.OUTPUTS_DIR
+    try:
+        api_module.OUTPUTS_DIR = tmp_path
+        with (
+            unittest.mock.patch("clipper.export_clip", side_effect=fake_export),
+            unittest.mock.patch("api.probe_media_duration", return_value=20.0),
+        ):
+            from api import recut_clip, RecutRequest
+            rr = RecutRequest(index=0, start=0, end=10)
+            recut_clip(jobs["fallback_test"], 0, 0.0, 10.0, None, rr)
+    finally:
+        api_module.OUTPUTS_DIR = real_outputs_dir
+
+    assert captured["caption"].style == "shadow"
+    assert captured["transition"] == "fadeblack"
+
+
+def test_recut_rejects_unknown_caption_style():
+    client = TestClient(app)
+    resp = client.post(
+        "/api/jobs/nope/recut",
+        json={"index": 0, "start": 0, "end": 5, "caption_style": "neon"},
+    )
+    assert resp.status_code == 422
+
+
+def test_recut_rejects_unknown_transition():
+    client = TestClient(app)
+    resp = client.post(
+        "/api/jobs/nope/recut",
+        json={"index": 0, "start": 0, "end": 5, "transition": "wipe"},
+    )
+    assert resp.status_code == 422
+
+
+def test_job_request_validates_caption_style_and_transition():
+    from pydantic import ValidationError
+
+    req = ClipJobRequest(url="https://youtu.be/x", caption_style="highlight", transition="fadewhite")
+    assert req.caption_style == "highlight"
+    assert req.transition == "fadewhite"
+    # Defaults.
+    plain = ClipJobRequest(url="https://youtu.be/x")
+    assert plain.caption_style == "classic"
+    assert plain.transition == "none"
+    with pytest.raises(ValidationError):
+        ClipJobRequest(url="https://youtu.be/x", caption_style="neon")
+    with pytest.raises(ValidationError):
+        ClipJobRequest(url="https://youtu.be/x", transition="slide")
+
+
 def test_recut_watermark_passed_to_export(tmp_path):
     import json as _json
 

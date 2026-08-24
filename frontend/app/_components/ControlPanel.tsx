@@ -1,5 +1,5 @@
 import { Scissors } from "lucide-react";
-import type { CamCorner, CaptionFont, CaptionPosition, CropMode, SourceMode, WatermarkPosition, WatermarkType } from "../../types/clip.type";
+import type { CamCorner, CaptionFont, CaptionPosition, CaptionStyle, CropMode, SourceMode, Transition, WatermarkPosition, WatermarkType } from "../../types/clip.type";
 import { CaptionPreview } from "./CaptionPreview";
 import { AiSection } from "./sections/AiSection";
 import { CropCaptionSection } from "./sections/CropCaptionSection";
@@ -7,6 +7,7 @@ import { HashtagsSection } from "./sections/HashtagsSection";
 import { JobFooter } from "./sections/JobFooter";
 import { RangeSection } from "./sections/RangeSection";
 import { SourceSection } from "./sections/SourceSection";
+import { TransitionSection } from "./sections/TransitionSection";
 import { WatermarkSection } from "./sections/WatermarkSection";
 
 export type ControlPanelProps = {
@@ -35,9 +36,13 @@ export type ControlPanelProps = {
   captionFont: CaptionFont;
   captionOutline: number;
   captionOutlineColor: string;
+  captionStyle: CaptionStyle;
+  transition: Transition;
   onCaptionFontChange: (value: CaptionFont) => void;
   onCaptionOutlineChange: (value: number) => void;
   onCaptionOutlineColorChange: (value: string) => void;
+  onCaptionStyleChange: (value: CaptionStyle) => void;
+  onTransitionChange: (value: Transition) => void;
   aiEnabled: boolean;
   aiBaseUrl: string;
   aiModel: string;
@@ -131,6 +136,7 @@ export function ControlPanel(props: ControlPanelProps) {
         captionFont={props.captionFont}
         captionOutline={props.captionOutline}
         captionOutlineColor={props.captionOutlineColor}
+        captionStyle={props.captionStyle}
         onCropModeChange={props.onCropModeChange}
         onCamCornerChange={props.onCamCornerChange}
         onBurnSubtitlesChange={props.onBurnSubtitlesChange}
@@ -140,6 +146,7 @@ export function ControlPanel(props: ControlPanelProps) {
         onCaptionFontChange={props.onCaptionFontChange}
         onCaptionOutlineChange={props.onCaptionOutlineChange}
         onCaptionOutlineColorChange={props.onCaptionOutlineColorChange}
+        onCaptionStyleChange={props.onCaptionStyleChange}
       />
       {props.burnSubtitles ? (
         <CaptionPreview
@@ -151,6 +158,12 @@ export function ControlPanel(props: ControlPanelProps) {
           outlineColor={props.captionOutlineColor}
         />
       ) : null}
+
+      <div className="sectionEyebrow">Efek Transisi</div>
+      <TransitionSection
+        transition={props.transition}
+        onTransitionChange={props.onTransitionChange}
+      />
 
       <div className="sectionEyebrow">Watermark</div>
       <WatermarkSection

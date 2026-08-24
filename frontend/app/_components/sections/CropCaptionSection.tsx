@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPTION_FONT_SIZE_MAX, CAPTION_FONT_SIZE_MIN, CAPTION_FONTS } from "../../../lib/constants";
-import type { CamCorner, CaptionFont, CaptionPosition, CropMode } from "../../../types/clip.type";
+import type { CamCorner, CaptionFont, CaptionPosition, CaptionStyle, CropMode } from "../../../types/clip.type";
 
 type CropCaptionSectionProps = {
   cropMode: CropMode;
@@ -13,6 +13,7 @@ type CropCaptionSectionProps = {
   captionFont: CaptionFont;
   captionOutline: number;
   captionOutlineColor: string;
+  captionStyle: CaptionStyle;
   onCropModeChange: (mode: CropMode) => void;
   onCamCornerChange: (value: CamCorner) => void;
   onBurnSubtitlesChange: (value: boolean) => void;
@@ -22,6 +23,7 @@ type CropCaptionSectionProps = {
   onCaptionFontChange: (value: CaptionFont) => void;
   onCaptionOutlineChange: (value: number) => void;
   onCaptionOutlineColorChange: (value: string) => void;
+  onCaptionStyleChange: (value: CaptionStyle) => void;
 };
 
 const CAM_CORNER_OPTIONS: { value: CamCorner; label: string }[] = [
@@ -30,6 +32,14 @@ const CAM_CORNER_OPTIONS: { value: CamCorner; label: string }[] = [
   { value: "tr", label: "Kanan Atas" },
   { value: "bl", label: "Kiri Bawah" },
   { value: "br", label: "Kanan Bawah" },
+];
+
+const CAPTION_STYLE_OPTIONS: { value: CaptionStyle; label: string; desc: string }[] = [
+  { value: "classic", label: "Classic", desc: "Putih + outline" },
+  { value: "bold", label: "Bold", desc: "Outline tebal" },
+  { value: "boxed", label: "Boxed", desc: "Kotak gelap" },
+  { value: "highlight", label: "Highlight", desc: "Box semi-transparan" },
+  { value: "shadow", label: "Shadow", desc: "Bayangan lembut" },
 ];
 
 export function CropCaptionSection({
@@ -42,6 +52,7 @@ export function CropCaptionSection({
   captionFont,
   captionOutline,
   captionOutlineColor,
+  captionStyle,
   onCropModeChange,
   onCamCornerChange,
   onBurnSubtitlesChange,
@@ -51,6 +62,7 @@ export function CropCaptionSection({
   onCaptionFontChange,
   onCaptionOutlineChange,
   onCaptionOutlineColorChange,
+  onCaptionStyleChange,
 }: CropCaptionSectionProps) {
   return (
     <div className="sectionBody">
@@ -93,6 +105,24 @@ export function CropCaptionSection({
         {burnSubtitles ? (
           <div className="captionFields">
             <div className="captionControls">
+              <div className="segmentedField">
+                <span>Style Caption</span>
+                <div className="captionStylePicker">
+                  {CAPTION_STYLE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`captionStyleChip${captionStyle === opt.value ? " captionStyleChip--active" : ""}`}
+                      onClick={() => onCaptionStyleChange(opt.value)}
+                      title={opt.desc}
+                    >
+                      <span className={`captionStylePreview captionStylePreview--${opt.value}`}>Aa</span>
+                      <span className="captionStyleLabel">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="segmentedField">
                 <span>Ukuran Font</span>
                 <div className="sliderRow">

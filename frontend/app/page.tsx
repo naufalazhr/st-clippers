@@ -21,10 +21,12 @@ import {
   DEFAULT_CAPTION_OUTLINE,
   DEFAULT_CAPTION_OUTLINE_COLOR,
   DEFAULT_CAPTION_POSITION,
+  DEFAULT_CAPTION_STYLE,
   DEFAULT_LANGUAGE,
   DEFAULT_MAX_DURATION,
   DEFAULT_MIN_DURATION,
   DEFAULT_MODEL,
+  DEFAULT_TRANSITION,
   JOB_POLL_INTERVAL_MS,
   RECENT_LOG_LIMIT,
 } from "../lib/constants";
@@ -33,9 +35,11 @@ import type {
   CamCorner,
   CaptionFont,
   CaptionPosition,
+  CaptionStyle,
   ClipJob,
   CropMode,
   SourceMode,
+  Transition,
   WatermarkPosition,
   WatermarkType,
 } from "../types/clip.type";
@@ -78,6 +82,8 @@ export default function HomePage() {
   const [captionFont, setCaptionFont] = useState<CaptionFont>(DEFAULT_CAPTION_FONT);
   const [captionOutline, setCaptionOutline] = useState(DEFAULT_CAPTION_OUTLINE);
   const [captionOutlineColor, setCaptionOutlineColor] = useState(DEFAULT_CAPTION_OUTLINE_COLOR);
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
+  const [transition, setTransition] = useState<Transition>(DEFAULT_TRANSITION);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiBaseUrl, setAiBaseUrl] = useState(DEFAULT_AI_BASE_URL);
   const [aiModel, setAiModel] = useState(DEFAULT_AI_MODEL);
@@ -326,6 +332,8 @@ export default function HomePage() {
           caption_font: captionFont,
           caption_outline: captionOutline,
           caption_outline_color: captionOutlineColor,
+          caption_style: captionStyle,
+          transition,
           required_hashtags: requiredHashtags,
           ai_enabled: aiEnabled,
           ai_base_url: aiBaseUrl.trim(),
@@ -360,6 +368,7 @@ export default function HomePage() {
      captionOutline,
      captionOutlineColor,
      captionPosition,
+     captionStyle,
      cropMode,
      loadJobs,
      maxDuration,
@@ -368,6 +377,7 @@ export default function HomePage() {
      requiredHashtags,
      sourceMode,
      targetClips,
+     transition,
      uploadToken,
      url,
    ]);
@@ -444,9 +454,13 @@ export default function HomePage() {
                captionFont={captionFont}
                captionOutline={captionOutline}
                captionOutlineColor={captionOutlineColor}
+               captionStyle={captionStyle}
+               transition={transition}
                onCaptionFontChange={setCaptionFont}
                onCaptionOutlineChange={setCaptionOutline}
                onCaptionOutlineColorChange={setCaptionOutlineColor}
+               onCaptionStyleChange={setCaptionStyle}
+               onTransitionChange={setTransition}
                aiEnabled={aiEnabled}
                aiBaseUrl={aiBaseUrl}
                aiModel={aiModel}
@@ -554,9 +568,13 @@ export default function HomePage() {
                  captionFont={captionFont}
                  captionOutline={captionOutline}
                  captionOutlineColor={captionOutlineColor}
+                 captionStyle={captionStyle}
+                 transition={transition}
                  onCaptionFontChange={setCaptionFont}
                  onCaptionOutlineChange={setCaptionOutline}
                  onCaptionOutlineColorChange={setCaptionOutlineColor}
+                 onCaptionStyleChange={setCaptionStyle}
+                 onTransitionChange={setTransition}
                  aiEnabled={aiEnabled}
                  aiBaseUrl={aiBaseUrl}
                  aiModel={aiModel}

@@ -80,6 +80,8 @@ class ClipJobRequest(BaseModel):
     ] = "DejaVu Sans"
     caption_outline: float = Field(default=2.0, ge=0, le=8)
     caption_outline_color: str = "#000000"
+    caption_style: Literal["classic", "bold", "boxed", "highlight", "shadow"] = "classic"
+    transition: Literal["none", "fade", "fadeblack", "fadewhite"] = "none"
     required_hashtags: list[str] = Field(default_factory=list)
     ai_enabled: bool = False
     ai_base_url: str = ""
@@ -130,6 +132,10 @@ class TimelineData(BaseModel):
     peaks: list[int] = []
 
 
+CAPTION_STYLES = ("classic", "bold", "boxed", "highlight", "shadow")
+TRANSITIONS = ("none", "fade", "fadeblack", "fadewhite")
+
+
 class RecutRequest(BaseModel):
     index: int
     start: float = Field(ge=0)
@@ -141,6 +147,8 @@ class RecutRequest(BaseModel):
     caption_font: str | None = None
     caption_outline: int | None = None
     caption_outline_color: str | None = None
+    caption_style: str | None = None
+    transition: str | None = None
     watermark_text: str | None = None
     watermark_image: str | None = None
     watermark_position: str = "bottom-right"
@@ -150,6 +158,20 @@ class RecutRequest(BaseModel):
     watermark_color: str | None = None
     watermark_margin_x: int = Field(default=20, ge=0)
     watermark_margin_y: int = Field(default=20, ge=0)
+
+    @field_validator("caption_style")
+    @classmethod
+    def _validate_caption_style(cls, value: str | None) -> str | None:
+        if value is not None and value not in CAPTION_STYLES:
+            raise ValueError(f"caption_style must be one of: {', '.join(CAPTION_STYLES)}")
+        return value
+
+    @field_validator("transition")
+    @classmethod
+    def _validate_transition(cls, value: str | None) -> str | None:
+        if value is not None and value not in TRANSITIONS:
+            raise ValueError(f"transition must be one of: {', '.join(TRANSITIONS)}")
+        return value
 
 
 class ClipFile(BaseModel):
@@ -413,6 +435,7 @@ def recut_clip(
         font_family=_pick(rr.caption_font if rr else None, req.caption_font),
         outline_width=_pick(rr.caption_outline if rr else None, req.caption_outline),
         outline_color=_pick(rr.caption_outline_color if rr else None, req.caption_outline_color),
+        style=_pick(rr.caption_style if rr else None, req.caption_style),
     )
     ai = AIConfig(enabled=False)
 
@@ -447,6 +470,7 @@ def recut_clip(
         cam_corner=req.cam_corner,
         required_hashtags=req.required_hashtags,
         watermark=wm,
+        transition=_pick(rr.transition if rr else None, req.transition),
     )
 
     py_cand = ClipCandidate(
@@ -587,6 +611,8 @@ def build_clipper_command(request: ClipJobRequest) -> list[str]:
     command.extend(["--caption-font", request.caption_font])
     command.extend(["--caption-outline", str(request.caption_outline)])
     command.extend(["--caption-outline-color", request.caption_outline_color])
+    command.extend(["--caption-style", request.caption_style])
+    command.extend(["--transition", request.transition])
     if request.required_hashtags:
         cleaned = [tag.strip().lstrip("#") for tag in request.required_hashtags if tag.strip()]
         if cleaned:

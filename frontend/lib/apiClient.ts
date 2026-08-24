@@ -133,7 +133,7 @@ export const uploadWatermarkImage = async (jobId: string, file: File): Promise<{
   return response.json() as Promise<{ url: string }>;
 };
 
-export const recutClip = async (jobId: string, body: { index: number; start: number; end: number; segments?: { start: number; end: number; text: string }[] }): Promise<RecutResponse> => {
+export const recutClip = async (jobId: string, body: { index: number; start: number; end: number; segments?: { start: number; end: number; text: string }[]; caption_style?: string; transition?: string }): Promise<RecutResponse> => {
   const response = await fetch(`${CLIENT_API_BASE}/api/jobs/${jobId}/recut`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
