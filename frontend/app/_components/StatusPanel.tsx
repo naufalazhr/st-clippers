@@ -1,6 +1,13 @@
 import { Activity } from "lucide-react";
 import { statusIcon } from "../../lib/constants";
-import type { ClipJob } from "../../types/clip.type";
+import type { ClipJob, CropMode } from "../../types/clip.type";
+
+const CROP_MODE_LABELS: Record<CropMode, string> = {
+  center: "Center crop",
+  person: "Follow person",
+  streamer: "Streamer",
+  pillarbox: "Pillarbox",
+};
 
 type StatusPanelProps = {
   job: ClipJob | null;
@@ -25,7 +32,7 @@ export function StatusPanel({ job, latestLogs }: StatusPanelProps) {
               {job.request.min_duration}s - {job.request.max_duration}s
             </span>
             <span>{job.request.analyze_seconds ? `Test: ${job.request.analyze_seconds}s` : "Full video"}</span>
-            <span>{job.request.crop_mode === "person" ? "Follow person" : "Center crop"}</span>
+            <span>{CROP_MODE_LABELS[job.request.crop_mode] ?? "Center crop"}</span>
           </div>
 
           <div className="logBox">

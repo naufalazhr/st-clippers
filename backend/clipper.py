@@ -90,7 +90,7 @@ WEAK_STARTS = {
     "ya",
 }
 
-CropMode = Literal["center", "person", "streamer"]
+CropMode = Literal["center", "person", "streamer", "pillarbox"]
 YUNET_MODEL_PATH = frozen_base() / "models" / "face_detection_yunet_2023mar.onnx"
 
 TRANSCRIPT_REPLACEMENTS = {
@@ -274,21 +274,41 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
 
 # Lanczos keeps fine detail (small text especially) that bicubic smears.
 SCALE_FLAGS = "lanczos"
+# Light sharpening applied only when a geometry step upscales; it masks the
+# softness of interpolation without halos on 1:1 or downscaled content.
+UPSCALE_SHARPEN = ",unsharp=5:5:0.4:5:5:0.0"
 CENTER_CROP_FILTER = (
     f"scale=1080:1920:force_original_aspect_ratio=increase:flags={SCALE_FLAGS},"
     "crop=1080:1920,setsar=1"
 )
 
 
+def _cover_upscales(video_path: Path | None) -> bool:
+    """True when scaling a source to cover 1080x1920 would enlarge pixels."""
+    size = get_video_size(video_path) if video_path else None
+    if size is None:
+        return False
+    source_width, source_height = size
+    return max(1080 / source_width, 1920 / source_height) > 1.0
+
+
+def center_crop_filter(video_path: Path | None) -> str:
+    if _cover_upscales(video_path):
+        return (
+            f"scale=1080:1920:force_original_aspect_ratio=increase:flags={SCALE_FLAGS}"
+            f"{UPSCALE_SHARPEN},crop=1080:1920,setsar=1"
+        )
+    return CENTER_CROP_FILTER
+
+
 def vertical_crop_filter(video_path: Path, clip: ClipCandidate, crop_mode: CropMode) -> str:
-    center_filter = CENTER_CROP_FILTER
     if crop_mode == "center":
-        return center_filter
+        return center_crop_filter(video_path)
 
     focus = detect_person_focus_x(video_path, clip)
     if focus is None:
         console.print(f"[yellow]No person detected for clip {clip.index}; using center crop.[/yellow]")
-        return center_filter
+        return center_crop_filter(video_path)
 
     focus_x, (source_width, source_height) = focus
     scale = max(1080 / source_width, 1920 / source_height)
@@ -297,9 +317,33 @@ def vertical_crop_filter(video_path: Path, clip: ClipCandidate, crop_mode: CropM
     crop_x = clamp_even((focus_x * scaled_width) - 540, 0, scaled_width - 1080)
     crop_y = clamp_even((scaled_height - 1920) / 2, 0, scaled_height - 1920)
     console.print(f"[green]Person crop[/green] clip {clip.index}: focus x={focus_x:.2f}, crop x={crop_x}")
+    sharpen = UPSCALE_SHARPEN if scale > 1.0 else ""
     return (
-        f"scale={scaled_width}:{scaled_height}:flags={SCALE_FLAGS},"
+        f"scale={scaled_width}:{scaled_height}:flags={SCALE_FLAGS}{sharpen},"
         f"crop=1080:1920:{crop_x}:{crop_y},setsar=1"
+    )
+
+
+def pillarbox_crop_filter(video_path: Path | None) -> str:
+    """Fit the whole frame inside 1080x1920 over a blurred cover background.
+
+    Keeps every source pixel visible (no detail-destroying upscale of a thin
+    landscape slice); the blur fill only ever upscales, which is invisible
+    under boxblur.
+    """
+    sharpen = ""
+    size = get_video_size(video_path) if video_path else None
+    if size is not None:
+        source_width, source_height = size
+        if min(1080 / source_width, 1920 / source_height) > 1.0:
+            sharpen = UPSCALE_SHARPEN
+    return (
+        "split=2[pbbg][pbfg];"
+        "[pbbg]scale=1080:1920:force_original_aspect_ratio=increase"
+        f":flags={SCALE_FLAGS},crop=1080:1920,boxblur=20:5[pbblur];"
+        f"[pbfg]scale=1080:1920:force_original_aspect_ratio=decrease"
+        f":flags={SCALE_FLAGS}{sharpen}[pbfit];"
+        "[pbblur][pbfit]overlay=(W-w)/2:(H-h)/2,setsar=1"
     )
 
 
@@ -396,13 +440,18 @@ def streamer_stack_filter(source_width: int, source_height: int, corner: CamCorn
     game_x = clamp_even((source_width - game_w) / 2, 0, source_width - game_w)
     game_y = clamp_even((source_height - game_h) / 2, 0, source_height - game_h)
 
+    cam_sharpen = UPSCALE_SHARPEN if max(1080 / cam_w, STREAMER_CAM_HEIGHT / cam_h) > 1.0 else ""
+    game_sharpen = UPSCALE_SHARPEN if max(1080 / game_w, STREAMER_GAME_HEIGHT / game_h) > 1.0 else ""
+
     return (
         "split=2[cam][game];"
         f"[cam]crop={cam_w}:{cam_h}:{cam_x}:{cam_y},"
-        f"scale=1080:{STREAMER_CAM_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS},"
+        f"scale=1080:{STREAMER_CAM_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS}"
+        f"{cam_sharpen},"
         f"crop=1080:{STREAMER_CAM_HEIGHT},setsar=1[ctop];"
         f"[game]crop={game_w}:{game_h}:{game_x}:{game_y},"
-        f"scale=1080:{STREAMER_GAME_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS},"
+        f"scale=1080:{STREAMER_GAME_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS}"
+        f"{game_sharpen},"
         f"crop=1080:{STREAMER_GAME_HEIGHT},setsar=1[gbot];"
         "[ctop][gbot]vstack=inputs=2,setsar=1"
     )
@@ -1264,6 +1313,8 @@ def export_clip(
 
     if crop_mode == "streamer":
         vf = streamer_crop_filter(video_path, clip, cam_corner)
+    elif crop_mode == "pillarbox":
+        vf = pillarbox_crop_filter(video_path)
     else:
         vf = vertical_crop_filter(video_path, clip, crop_mode)
     if burn_subtitles and clip_segments:
@@ -1497,9 +1548,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-burn-subtitles", action="store_true", help="Create SRT files but do not burn subtitles into MP4")
     parser.add_argument(
         "--crop-mode",
-        choices=["center", "person", "streamer"],
+        choices=["center", "person", "streamer", "pillarbox"],
         default="center",
-        help="center, person-focused, or streamer (webcam stacked over gameplay)",
+        help="center, person-focused, streamer (webcam stacked over gameplay), or pillarbox (fit frame over blurred background)",
     )
     parser.add_argument(
         "--cam-corner",

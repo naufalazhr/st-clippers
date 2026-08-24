@@ -60,6 +60,7 @@ export function CropCaptionSection({
           <button className={cropMode === "center" ? "active" : ""} type="button" onClick={() => onCropModeChange("center")}>Center</button>
           <button className={cropMode === "person" ? "active" : ""} type="button" onClick={() => onCropModeChange("person")}>Follow Person</button>
           <button className={cropMode === "streamer" ? "active" : ""} type="button" onClick={() => onCropModeChange("streamer")}>Streamer</button>
+          <button className={cropMode === "pillarbox" ? "active" : ""} type="button" onClick={() => onCropModeChange("pillarbox")}>Pillarbox</button>
         </div>
       </div>
 

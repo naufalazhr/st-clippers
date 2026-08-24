@@ -164,3 +164,63 @@ def test_conservative_sort_prefers_https_at_equal_resolution():
         source_format_ladder(2160), [starved, rich, M4A], clipper.CONSERVATIVE_FORMAT_SORT
     )
     assert picked[0]["format_id"] == "137"
+
+
+def _person_clip():
+    return clipper.ClipCandidate(
+        index=0, start=0.0, end=10.0, duration=10.0, score=1, title="t", reason="r", text="x"
+    )
+
+
+def test_pillarbox_blurs_background_and_centers_foreground():
+    vf = clipper.pillarbox_crop_filter(None)
+    # Foreground must FIT (no upscale of a thin slice), background must blur.
+    assert "force_original_aspect_ratio=decrease" in vf
+    assert "force_original_aspect_ratio=increase" in vf
+    assert "boxblur" in vf
+    assert "overlay=(W-w)/2:(H-h)/2" in vf
+
+
+def test_pillarbox_sharpens_only_when_upscaling(tmp_path):
+    from unittest.mock import patch
+
+    video = tmp_path / "v.mp4"
+    with patch("clipper.get_video_size", return_value=(640, 360)):
+        assert "unsharp" in clipper.pillarbox_crop_filter(video)
+    with patch("clipper.get_video_size", return_value=(3840, 2160)):
+        assert "unsharp" not in clipper.pillarbox_crop_filter(video)
+
+
+def test_person_crop_adds_unsharp_when_upscaling(tmp_path):
+    from unittest.mock import patch
+
+    clip = _person_clip()
+    video = tmp_path / "v.mp4"
+    video.touch()
+    # 1920x1080 landscape covers 1080x1920 at a 1.78x upscale.
+    with patch("clipper.detect_person_focus_x", return_value=(0.5, (1920, 1080))):
+        vf = vertical_crop_filter(video, clip, "person")
+    assert "unsharp" in vf.split(",")[1]
+
+
+def test_person_crop_skips_unsharp_when_downscaling(tmp_path):
+    from unittest.mock import patch
+
+    clip = _person_clip()
+    video = tmp_path / "v.mp4"
+    video.touch()
+    with patch("clipper.detect_person_focus_x", return_value=(0.5, (3840, 2160))):
+        vf = vertical_crop_filter(video, clip, "person")
+    assert "unsharp" not in vf
+
+
+def test_streamer_panels_sharpen_only_on_upscale():
+    assert "unsharp" in streamer_stack_filter(1280, 720, "br")
+    assert "unsharp" not in streamer_stack_filter(3840, 2160, "br")
+
+
+def test_api_accepts_pillarbox_crop_mode():
+    from api import ClipJobRequest
+
+    request = ClipJobRequest(url="https://example.com/video", crop_mode="pillarbox")
+    assert request.crop_mode == "pillarbox"
