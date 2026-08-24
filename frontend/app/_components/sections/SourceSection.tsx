@@ -36,6 +36,7 @@ export function SourceSection({
           value={name}
           onChange={(event) => onNameChange(event.target.value)}
           placeholder="Nama project (opsional)"
+          aria-label="Nama project"
         />
       </label>
 
@@ -67,6 +68,7 @@ export function SourceSection({
             value={url}
             onChange={(event) => onUrlChange(event.target.value)}
             placeholder="https://www.youtube.com/watch?v=..."
+            aria-label="Link video YouTube"
           />
           <p className="field-help">Pastikan video memiliki percakapan yang jelas untuk hasil transkripsi terbaik.</p>
         </label>

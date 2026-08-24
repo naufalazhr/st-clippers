@@ -140,16 +140,17 @@ export function HistoryTable({
         <input
           type="text"
           placeholder="Cari nama project…"
+          aria-label="Cari nama project"
           value={nameQuery}
           onChange={(e) => setNameQuery(e.target.value)}
         />
         <label>
           Dari
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <input type="date" aria-label="Tanggal mulai filter" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </label>
         <label>
           Sampai
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <input type="date" aria-label="Tanggal akhir filter" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
         {(nameQuery || dateFrom || dateTo) && (
           <button type="button" className="filterResetBtn" onClick={() => { setNameQuery(""); setDateFrom(""); setDateTo(""); }}>

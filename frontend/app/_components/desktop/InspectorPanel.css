@@ -1,7 +1,7 @@
 .inspectorPanel {
   display: grid;
   grid-template-columns: 560px 1fr;
-  gap: 24px;
+  gap: var(--space-xl);
   align-items: start;
   height: 100%;
 }
@@ -9,45 +9,63 @@
 .inspectorPanel-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
 .inspectorPanel-preview {
   position: sticky;
   top: 0;
-  padding-top: 4px;
+  padding-top: var(--space-xs);
 }
 
+/* ── Collapsible Group ── */
 .collapseGroup {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--panel);
   overflow: hidden;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.collapseGroup:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.collapseGroup[data-open="true"] {
+  box-shadow: var(--shadow-md);
 }
 
 .collapseGroup-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
   width: 100%;
-  padding: 14px 16px;
+  padding: var(--space-md) var(--space-lg);
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-base);
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  transition: var(--transition-fast);
+  transition: background-color var(--transition-base);
+  text-align: left;
 }
 
 .collapseGroup-header:hover {
   background: var(--panel-hover);
 }
 
+.collapseGroup-header:active {
+  transform: scale(0.99);
+}
+
 .collapseGroup-chevron {
   color: var(--text-muted);
-  transition: transform var(--transition-fast);
+  transition: transform var(--transition-base), color var(--transition-base);
+  flex-shrink: 0;
 }
 
 .collapseGroup[data-open="true"] .collapseGroup-chevron {
@@ -61,17 +79,41 @@
 
 .collapseGroup[data-open="true"] .collapseGroup-body {
   display: block;
+  animation: slideIn 200ms ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .collapseGroup-inner {
-  padding: 4px 16px 16px;
+  padding: var(--space-xs) var(--space-lg) var(--space-lg);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
 }
 
+/* ── Inspector Footer ── */
 .inspectorFooter {
   position: sticky;
   bottom: 0;
-  padding-top: 8px;
+  padding-top: var(--space-sm);
+  background: linear-gradient(to top, var(--bg) 85%, transparent);
+  z-index: var(--z-sticky);
+  box-shadow: var(--shadow-topbar);
+}
+
+/* ── Section Body ── */
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }

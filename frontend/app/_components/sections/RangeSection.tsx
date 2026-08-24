@@ -31,6 +31,7 @@ export function RangeSection({
           type="number"
           value={targetClips || ""}
           placeholder="Auto (kosongkan = otomatis)"
+          aria-label="Target jumlah clip"
           onChange={(event) => onTargetClipsChange(Math.max(0, Number(event.target.value)))}
         />
         <p className="field-help">

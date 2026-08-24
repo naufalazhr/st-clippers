@@ -34,6 +34,21 @@
   overflow-y: auto;
   border-top: 1px solid var(--border);
   background: var(--bg-soft);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.statusBar-log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.statusBar-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.statusBar-log::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
 }
 
 .statusBar-log .logBox {
@@ -50,8 +65,9 @@
   display: flex;
   align-items: center;
   height: 32px;
-  padding: 0 12px;
-  gap: 8px;
+  padding: 0 var(--space-md);
+  gap: var(--space-sm);
+  background: var(--bg);
 }
 
 .statusBar-left {
@@ -65,8 +81,8 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: var(--space-sm);
+  padding: 0 var(--space-md);
   overflow: hidden;
 }
 
@@ -74,20 +90,22 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
+/* ── Health Indicator ── */
 .healthDot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--text-muted);
   flex-shrink: 0;
+  transition: background-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .healthDot--ok {
   background: var(--success);
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
 }
 
 .healthDot--connecting {
@@ -97,10 +115,11 @@
 
 .healthDot--error {
   background: var(--danger);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
 }
 
 .statusBar-label {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -108,37 +127,80 @@
 }
 
 .statusBar-title {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .statusBar-idle {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-muted);
+  font-style: italic;
 }
 
+/* ── Status Bar Icon Buttons ── */
 .statusBar-iconBtn {
   display: inline-grid;
   place-items: center;
   width: 28px;
   height: 28px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: var(--transition-fast);
+  transition: all var(--transition-base);
 }
 
 .statusBar-iconBtn:hover {
   background: var(--panel-hover);
   color: var(--primary);
+  border-color: var(--border);
+}
+
+.statusBar-iconBtn:active {
+  transform: scale(0.95);
 }
 
 .statusBar-iconBtn[data-active="true"] {
   color: var(--primary);
+  background: var(--primary-soft);
+  border-color: var(--border-focus);
+}
+
+/* ── Status Badge (in status bar context) ── */
+.statusBar .statusBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+}
+
+.statusBar .statusBadge.status-queued { 
+  background: var(--text-secondary); 
+  color: var(--bg); 
+}
+
+.statusBar .statusBadge.status-running { 
+  background: var(--warning); 
+  color: var(--bg); 
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.statusBar .statusBadge.status-completed { 
+  background: var(--success); 
+  color: var(--bg); 
+}
+
+.statusBar .statusBadge.status-failed { 
+  background: var(--danger); 
+  color: #fff; 
 }

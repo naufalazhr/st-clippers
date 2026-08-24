@@ -99,7 +99,10 @@ export default function HomePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
-  useLayoutEffect(() => { setIsDesktop(isInTauri()); }, []);
+  useLayoutEffect(() => {
+    const forceDesktop = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("desktop");
+    setIsDesktop(isInTauri() || forceDesktop);
+  }, []);
   const [view, setView] = useState<DesktopView>("editor");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);

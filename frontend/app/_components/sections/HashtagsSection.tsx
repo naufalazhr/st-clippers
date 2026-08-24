@@ -67,6 +67,7 @@ export function HashtagsSection({
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             placeholder={requiredHashtags.length === 0 ? "sultanclip, viral, fyp" : "Tambah hashtag..."}
+            aria-label="Tambah hashtag wajib"
           />
         </div>
         <p className="field-help">

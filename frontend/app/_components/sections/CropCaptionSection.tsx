@@ -86,7 +86,7 @@ export function CropCaptionSection({
       <div className="aiBlock">
         <label className="aiToggle">
           <span className="aiToggleLabel">Tempel Subtitle</span>
-          <input type="checkbox" checked={burnSubtitles} onChange={(event) => onBurnSubtitlesChange(event.target.checked)} />
+          <input type="checkbox" checked={burnSubtitles} onChange={(event) => onBurnSubtitlesChange(event.target.checked)} aria-label="Tempel Subtitle" />
         </label>
         <p className="field-help">Tempelkan teks transkrip langsung ke dalam video.</p>
 

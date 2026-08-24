@@ -36,7 +36,7 @@ export function AiSection({
       <div className="aiBlock">
         <label className="aiToggle">
           <span className="aiToggleLabel"><Sparkles size={16} /> AI Agent Pemilih Klip</span>
-          <input type="checkbox" checked={aiEnabled} onChange={(event) => onAiEnabledChange(event.target.checked)} />
+          <input type="checkbox" checked={aiEnabled} onChange={(event) => onAiEnabledChange(event.target.checked)} aria-label="AI Agent Pemilih Klip" />
         </label>
         <p className="field-help">LLM menilai setiap kandidat dan memilih bagian paling kuat untuk dijadikan klip.</p>
 
