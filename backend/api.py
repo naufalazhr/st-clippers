@@ -70,7 +70,7 @@ class ClipJobRequest(BaseModel):
     language: str = "id"
     analyze_seconds: float | None = Field(default=None, ge=10, le=7200)
     burn_subtitles: bool = True
-    crop_mode: Literal["center", "person", "streamer", "pillarbox"] = "center"
+    crop_mode: Literal["center", "person", "streamer", "pillarbox", "split"] = "center"
     cam_corner: Literal["auto", "br", "bl", "tr", "tl"] = "auto"
     caption_font_size: int = Field(default=30, ge=6, le=120)
     caption_position: Literal["center", "bottom"] = "center"

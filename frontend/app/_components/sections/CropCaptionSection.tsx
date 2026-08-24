@@ -61,8 +61,13 @@ export function CropCaptionSection({
           <button className={cropMode === "person" ? "active" : ""} type="button" onClick={() => onCropModeChange("person")}>Follow Person</button>
           <button className={cropMode === "streamer" ? "active" : ""} type="button" onClick={() => onCropModeChange("streamer")}>Streamer</button>
           <button className={cropMode === "pillarbox" ? "active" : ""} type="button" onClick={() => onCropModeChange("pillarbox")}>Pillarbox</button>
+          <button className={cropMode === "split" ? "active" : ""} type="button" onClick={() => onCropModeChange("split")}>Split Screen</button>
         </div>
       </div>
+
+      {cropMode === "split" ? (
+        <p className="field-help">Layar terbagi dua: wajah mengikuti orang di panel atas, kegiatan penuh di panel bawah (vertikal 9:16).</p>
+      ) : null}
 
       {cropMode === "streamer" ? (
         <div className="segmentedField">

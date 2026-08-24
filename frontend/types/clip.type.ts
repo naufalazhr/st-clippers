@@ -1,5 +1,5 @@
 export type JobStatus = "queued" | "running" | "completed" | "failed";
-export type CropMode = "center" | "person" | "streamer" | "pillarbox";
+export type CropMode = "center" | "person" | "streamer" | "pillarbox" | "split";
 export type CamCorner = "auto" | "br" | "bl" | "tr" | "tl";
 export type CaptionPosition = "center" | "bottom";
 export type CaptionFont =

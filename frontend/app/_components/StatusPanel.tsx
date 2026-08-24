@@ -7,6 +7,7 @@ const CROP_MODE_LABELS: Record<CropMode, string> = {
   person: "Follow person",
   streamer: "Streamer",
   pillarbox: "Pillarbox",
+  split: "Split screen",
 };
 
 type StatusPanelProps = {

@@ -90,7 +90,7 @@ WEAK_STARTS = {
     "ya",
 }
 
-CropMode = Literal["center", "person", "streamer", "pillarbox"]
+CropMode = Literal["center", "person", "streamer", "pillarbox", "split"]
 YUNET_MODEL_PATH = frozen_base() / "models" / "face_detection_yunet_2023mar.onnx"
 
 TRANSCRIPT_REPLACEMENTS = {
@@ -352,6 +352,10 @@ CamCorner = Literal["br", "bl", "tr", "tl"]
 STREAMER_CAM_HEIGHT = 640
 STREAMER_GAME_HEIGHT = 1920 - STREAMER_CAM_HEIGHT  # 1280
 
+# Split-screen tutorial layout: tracked face panel on top, full activity below.
+SPLIT_FACE_HEIGHT = 640
+SPLIT_ACTIVITY_HEIGHT = 1920 - SPLIT_FACE_HEIGHT  # 1280
+
 
 def get_video_size(video_path: Path) -> tuple[int, int] | None:
     try:
@@ -476,6 +480,196 @@ def streamer_crop_filter(video_path: Path, clip: ClipCandidate, cam_corner: str)
     assert corner is not None
     console.print(f"[green]Streamer stack[/green] clip {clip.index}: cam corner={corner}")
     return streamer_stack_filter(size[0], size[1], corner)
+
+
+def detect_face_focus(video_path: Path, clip: ClipCandidate) -> tuple[float, float, float] | None:
+    """Weighted-average face centre (x, y) plus face size, in source pixels.
+
+    Same detector stack as follow-person mode (YuNet when available, then
+    frontal/profile Haar cascades), but tracks both axes so the split-screen
+    face panel can frame head and shoulders.
+    """
+    try:
+        import cv2
+    except Exception:
+        return None
+
+    size = get_video_size(video_path)
+    if size is None:
+        return None
+
+    capture = cv2.VideoCapture(str(video_path.resolve()))
+    if not capture.isOpened():
+        return None
+
+    _frozen_haar = frozen_base() / "cv2" / "data" / "haarcascades"
+    _haar_dir = _frozen_haar if _frozen_haar.exists() else Path(cv2.data.haarcascades)
+    face_cascade = cv2.CascadeClassifier(str(_haar_dir / "haarcascade_frontalface_default.xml"))
+    profile_cascade = cv2.CascadeClassifier(str(_haar_dir / "haarcascade_profileface.xml"))
+    yunet = None
+    if YUNET_MODEL_PATH.exists() and hasattr(cv2, "FaceDetectorYN_create"):
+        yunet = cv2.FaceDetectorYN_create(
+            str(YUNET_MODEL_PATH),
+            "",
+            (320, 320),
+            0.35,
+            0.3,
+            5000,
+        )
+
+    duration = max(0.1, clip.end - clip.start)
+    sample_count = min(8, max(4, int(duration // 10)))
+    step = duration / (sample_count + 1)
+    offsets = [step * (index + 1) for index in range(sample_count)]
+
+    total_weight = 0.0
+    sum_x = 0.0
+    sum_y = 0.0
+    sum_size = 0.0
+
+    for offset in offsets:
+        capture.set(cv2.CAP_PROP_POS_MSEC, (clip.start + offset) * 1000)
+        ok, frame = capture.read()
+        if not ok:
+            continue
+
+        resize_scale = min(1.0, 720 / max(frame.shape[:2]))
+        if resize_scale < 1:
+            resized = cv2.resize(frame, None, fx=resize_scale, fy=resize_scale, interpolation=cv2.INTER_AREA)
+        else:
+            resized = frame
+        resized_height, resized_width = resized.shape[:2]
+        gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+
+        # (centre_x, centre_y, box_size, weight) all in source pixels.
+        detections: list[tuple[float, float, float, float]] = []
+
+        if yunet is not None:
+            yunet.setInputSize((resized_width, resized_height))
+            _, faces = yunet.detect(resized)
+            if faces is not None:
+                for face in faces:
+                    x, y, w, h = face[:4]
+                    confidence = float(face[-1])
+                    detections.append(
+                        (
+                            (x + w / 2) / resize_scale,
+                            (y + h / 2) / resize_scale,
+                            max(w, h) / resize_scale,
+                            confidence * 3.0,
+                        )
+                    )
+
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(36, 36))
+        for x, y, w, h in faces:
+            detections.append(
+                ((x + w / 2) / resize_scale, (y + h / 2) / resize_scale, max(w, h) / resize_scale, 2.0)
+            )
+
+        profiles = profile_cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=(34, 34))
+        for x, y, w, h in profiles:
+            detections.append(
+                ((x + w / 2) / resize_scale, (y + h / 2) / resize_scale, max(w, h) / resize_scale, 1.8)
+            )
+
+        flipped_gray = cv2.flip(gray, 1)
+        flipped_profiles = profile_cascade.detectMultiScale(
+            flipped_gray,
+            scaleFactor=1.08,
+            minNeighbors=4,
+            minSize=(34, 34),
+        )
+        for x, y, w, h in flipped_profiles:
+            original_x = resized_width - x - w
+            detections.append(
+                (
+                    (original_x + w / 2) / resize_scale,
+                    (y + h / 2) / resize_scale,
+                    max(w, h) / resize_scale,
+                    1.8,
+                )
+            )
+
+        # Keep only the most prominent face per sample so background faces do not drift the focus.
+        if detections:
+            cx, cy, box_size, weight = max(detections, key=lambda item: item[2] * item[3])
+            sum_x += cx * weight
+            sum_y += cy * weight
+            sum_size += box_size * weight
+            total_weight += weight
+
+    capture.release()
+    if total_weight <= 0:
+        return None
+    return sum_x / total_weight, sum_y / total_weight, sum_size / total_weight
+
+
+def split_screen_filter(source_width: int, source_height: int, face: tuple[float, float, float] | None) -> str:
+    """Two stacked panels on a 1080x1920 canvas.
+
+    Top panel (1080x640): crop framed on the tracked face (head + shoulders).
+    Bottom panel (1080x1280): the whole frame fit over a blurred cover fill so
+    the activity stays fully visible — nothing important gets cropped away.
+    """
+    face_aspect = 1080 / SPLIT_FACE_HEIGHT
+
+    if face is not None:
+        face_cx, face_cy, face_size = face
+        # Frame roughly head + shoulders: face fills about a third of the band width.
+        box_w = max(face_size * 3.0, source_width * 0.25)
+        box_h = box_w / face_aspect
+        if box_h > source_height:
+            box_h = source_height
+            box_w = box_h * face_aspect
+        box_w = clamp_even(box_w, 16, source_width)
+        box_h = clamp_even(box_h, 16, source_height)
+        face_x = clamp_even(face_cx - box_w / 2, 0, source_width - box_w)
+        face_y = clamp_even(face_cy - box_h / 2, 0, source_height - box_h)
+    else:
+        # No face found: keep a centred slice biased to the upper half where presenters usually are.
+        box_w = source_width
+        box_h = min(float(source_height), box_w / face_aspect)
+        box_w = clamp_even(box_w, 16, source_width)
+        box_h = clamp_even(box_h, 16, source_height)
+        face_x = clamp_even((source_width - box_w) / 2, 0, source_width - box_w)
+        face_y = clamp_even((source_height * 0.25) - box_h / 2, 0, source_height - box_h)
+
+    face_sharpen = UPSCALE_SHARPEN if max(1080 / box_w, SPLIT_FACE_HEIGHT / box_h) > 1.0 else ""
+    # Blur fill only ever upscales, which is invisible under boxblur.
+    activity_sharpen = ""
+    if min(1080 / source_width, SPLIT_ACTIVITY_HEIGHT / source_height) > 1.0:
+        activity_sharpen = UPSCALE_SHARPEN
+
+    return (
+        "split=2[fsplit][asplit];"
+        f"[fsplit]crop={box_w}:{box_h}:{face_x}:{face_y},"
+        f"scale=1080:{SPLIT_FACE_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS}"
+        f"{face_sharpen},"
+        f"crop=1080:{SPLIT_FACE_HEIGHT},setsar=1[ftop];"
+        "[asplit]split=2[abg][afg];"
+        "[abg]scale=1080:"
+        f"{SPLIT_ACTIVITY_HEIGHT}:force_original_aspect_ratio=increase:flags={SCALE_FLAGS},"
+        f"crop=1080:{SPLIT_ACTIVITY_HEIGHT},boxblur=20:5[ablur];"
+        "[afg]scale=1080:"
+        f"{SPLIT_ACTIVITY_HEIGHT}:force_original_aspect_ratio=decrease:flags={SCALE_FLAGS}"
+        f"{activity_sharpen}[afit];"
+        "[ablur][afit]overlay=(W-w)/2:(H-h)/2,setsar=1[abot];"
+        "[ftop][abot]vstack=inputs=2,setsar=1"
+    )
+
+
+def split_crop_filter(video_path: Path, clip: ClipCandidate) -> str:
+    size = get_video_size(video_path)
+    if size is None:
+        console.print(f"[yellow]Split-screen layout unavailable for clip {clip.index}; using center crop.[/yellow]")
+        return center_crop_filter(video_path)
+
+    face = detect_face_focus(video_path, clip)
+    if face is None:
+        console.print(f"[yellow]No face detected for clip {clip.index}; top panel uses upper-centre slice.[/yellow]")
+    else:
+        console.print(f"[green]Split screen[/green] clip {clip.index}: face focus x={face[0]:.2f} y={face[1]:.2f}")
+    return split_screen_filter(size[0], size[1], face)
 
 
 def seconds_to_stamp(seconds: float, srt: bool = False) -> str:
@@ -1315,6 +1509,8 @@ def export_clip(
         vf = streamer_crop_filter(video_path, clip, cam_corner)
     elif crop_mode == "pillarbox":
         vf = pillarbox_crop_filter(video_path)
+    elif crop_mode == "split":
+        vf = split_crop_filter(video_path, clip)
     else:
         vf = vertical_crop_filter(video_path, clip, crop_mode)
     if burn_subtitles and clip_segments:
@@ -1548,9 +1744,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-burn-subtitles", action="store_true", help="Create SRT files but do not burn subtitles into MP4")
     parser.add_argument(
         "--crop-mode",
-        choices=["center", "person", "streamer", "pillarbox"],
+        choices=["center", "person", "streamer", "pillarbox", "split"],
         default="center",
-        help="center, person-focused, streamer (webcam stacked over gameplay), or pillarbox (fit frame over blurred background)",
+        help="center, person-focused, streamer (webcam stacked over gameplay), pillarbox (fit frame over blurred background), or split (face panel over full activity view)",
     )
     parser.add_argument(
         "--cam-corner",
