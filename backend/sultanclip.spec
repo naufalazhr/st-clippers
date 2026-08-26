@@ -19,6 +19,9 @@ a = Analysis(
         "uvicorn.lifespan", "uvicorn.lifespan.on",
         "faster_whisper", "ctranslate2", "yt_dlp", "multipart",
         "clipper", "model_cache", "llm", "safe_path",
+        # urllib lazily imports these codecs for HTTPS hostnames; PyInstaller
+        # misses them -> "unknown encoding: idna" at runtime in frozen builds
+        "encodings.idna", "encodings.punycode",
     ],
     excludes=["torch", "nvidia", "nvidia.cublas", "nvidia.cudnn", "tkinter", "unittest", "pydoc"],
     noarchive=False,
