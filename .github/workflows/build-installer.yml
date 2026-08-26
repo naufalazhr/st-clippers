@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-installer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -67,6 +71,47 @@ jobs:
           ls -la dist/sultanclip-backend/ || ls -la dist/
           test -f dist/sultanclip-backend/sultanclip-backend.exe \
             -o -f dist/sultanclip-backend/sultanclip-backend
+      - name: Smoke test frozen backend
+        working-directory: backend
+        shell: bash
+        run: |
+          if [ -f dist/sultanclip-backend/sultanclip-backend.exe ]; then
+            SMOKE_BIN=dist/sultanclip-backend/sultanclip-backend.exe
+          elif [ -f dist/sultanclip-backend/sultanclip-backend ]; then
+            SMOKE_BIN=dist/sultanclip-backend/sultanclip-backend
+          else
+            echo "::error::frozen backend binary not found"
+            exit 1
+          fi
+          "$SMOKE_BIN" --port 8099 > smoke.log 2>&1 &
+          SMOKE_PID=$!
+          trap 'kill $SMOKE_PID 2>/dev/null || true' EXIT
+          healthy=0
+          for _ in $(seq 1 45); do
+            if curl -sf -m 3 http://127.0.0.1:8099/api/health >/dev/null 2>&1; then healthy=1; break; fi
+            sleep 2
+          done
+          if [ "$healthy" != "1" ]; then
+            echo "::error::frozen backend did not become healthy"
+            cat smoke.log
+            exit 1
+          fi
+          # HTTPS call through urllib is what regressed before (missing
+          # encodings.idna in the bundle -> "unknown encoding: idna").
+          MODELS=$(curl -sf -m 30 -X POST http://127.0.0.1:8099/api/models \
+            -H 'Content-Type: application/json' \
+            -d '{"base_url":"https://openrouter.ai/api/v1","api_key":""}') || true
+          if ! printf '%s' "$MODELS" | grep -q '"models"'; then
+            echo "::error::/api/models smoke failed (bundling regression, e.g. missing encodings.idna)"
+            cat smoke.log
+            exit 1
+          fi
+          SCHEMA=$(curl -sf http://127.0.0.1:8099/openapi.json) || true
+          if ! printf '%s' "$SCHEMA" | grep -q '"split"'; then
+            echo "::error::crop_mode 'split' missing from OpenAPI schema"
+            exit 1
+          fi
+          echo "Smoke OK: health, /api/models over HTTPS, crop_mode enum includes split"
       - name: Stage backend onedir into Tauri resources
         shell: bash
         run: |
