@@ -32,3 +32,12 @@ desktop/src-tauri/binaries/
 Thumbs.db
 .omo/
 node_modules/
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
+
+# Local agent/tooling session dirs
+.opencode/
+.openchamber/
+.specify/
