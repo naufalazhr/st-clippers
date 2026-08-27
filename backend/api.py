@@ -15,7 +15,7 @@ import wave
 from math import ceil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -52,6 +52,8 @@ UPLOADS_DIR = resolve_data_dir() / "uploads"
 JOBS_PATH = resolve_data_dir() / "jobs.json"
 ALLOWED_UPLOAD_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"}
 SECONDS_PER_TARGET_CLIP = 360
+# How often to look for newly finished clips while the pipeline runs.
+CLIP_SCAN_INTERVAL_SECONDS = 3.0
 MIN_AUTO_CLIPS = 2
 MAX_AUTO_CLIPS = 8
 FULL_ANALYSIS_LIMIT_SECONDS = 30 * 60
@@ -81,6 +83,8 @@ class ClipJobRequest(BaseModel):
     caption_outline: float = Field(default=2.0, ge=0, le=8)
     caption_outline_color: str = "#000000"
     caption_style: Literal["classic", "bold", "boxed", "highlight", "shadow"] = "classic"
+    # Opacity of the box behind boxed/highlight captions. None = preset default.
+    caption_box_opacity: int | None = Field(default=None, ge=0, le=100)
     transition: Literal["none", "fade", "fadeblack", "fadewhite"] = "none"
     required_hashtags: list[str] = Field(default_factory=list)
     ai_enabled: bool = False
@@ -148,6 +152,7 @@ class RecutRequest(BaseModel):
     caption_outline: int | None = None
     caption_outline_color: str | None = None
     caption_style: str | None = None
+    caption_box_opacity: int | None = None
     transition: str | None = None
     watermark_text: str | None = None
     watermark_image: str | None = None
@@ -191,6 +196,14 @@ class ClipJob(BaseModel):
     updated_at: str
     logs: list[str] = []
     clips: list[ClipFile] = []
+    # How many clips the pipeline was asked for, so the UI can render one
+    # placeholder per pending clip instead of an empty panel.
+    clips_expected: int | None = None
+    # Index of the clip currently being re-rendered by a recut, and the error
+    # from the last one. A recut runs in the background so the UI can show
+    # progress instead of blocking on the request.
+    recut_index: int | None = None
+    recut_error: str | None = None
     candidates: list[ClipCandidate] = []
     error: str | None = None
     work_dir: str | None = None
@@ -307,8 +320,19 @@ job_secrets: dict[str, str] = {}
 
 
 def clip_url(path: Path) -> str:
+    """URL for a rendered file, versioned by its modification time.
+
+    A recut rewrites the clip in place, so without this the URL never changes
+    and the webview keeps serving the copy it already cached: the edit looked
+    like it did nothing, and seeking a stale copy whose length no longer matched
+    the file stalled playback near the end. StaticFiles ignores the query.
+    """
     relative = path.resolve().relative_to(OUTPUTS_DIR.resolve()).as_posix()
-    return "/outputs/" + quote(relative)
+    try:
+        version = int(path.stat().st_mtime)
+    except OSError:
+        return "/outputs/" + quote(relative)
+    return f"/outputs/{quote(relative)}?v={version}"
 
 
 def clip_file_from_path(path: Path) -> ClipFile:
@@ -325,9 +349,15 @@ def clip_file_from_path(path: Path) -> ClipFile:
     )
 
 
+# export_clip writes "<name>.video_tmp.mp4" while a clip is still rendering.
+INCOMPLETE_CLIP_SUFFIX = ".video_tmp.mp4"
+
+
 def discover_clips(started_at: float) -> list[ClipFile]:
     clips: list[ClipFile] = []
     for path in OUTPUTS_DIR.rglob("clips/*.mp4"):
+        if path.name.endswith(INCOMPLETE_CLIP_SUFFIX):
+            continue
         if path.stat().st_mtime + 1 < started_at:
             continue
         clips.append(clip_file_from_path(path))
@@ -362,6 +392,48 @@ def discover_work_dir(started_at: float) -> str | None:
     return parent.relative_to(OUTPUTS_DIR.resolve()).as_posix()
 
 
+def validate_recut(
+    job: ClipJob,
+    index: int,
+    start: float,
+    end: float,
+    override_segments: list[dict] | None = None,
+):
+    """Cheap pre-flight checks for a recut, raising ValueError on bad input.
+
+    Kept separate from the render so the endpoint can answer 400 immediately
+    while the expensive export runs in the background.
+    """
+    from clipper import TranscriptSegment as TranscriptSegmentDC
+
+    work_dir = OUTPUTS_DIR / job.work_dir
+    source = next(work_dir.glob("source.*"), None)
+    if not source:
+        raise ValueError("source not available")
+
+    transcript_files = sorted(
+        work_dir.glob("transcript*.json"), key=lambda p: p.stat().st_mtime
+    )
+    if not transcript_files:
+        raise ValueError("no transcript")
+    rows = json.loads(transcript_files[-1].read_text(encoding="utf-8"))
+    segments = [TranscriptSegmentDC(**s) for s in rows]
+
+    if override_segments is not None and len(override_segments) == 0:
+        raise ValueError("segments must not be empty")
+
+    duration = probe_media_duration(source) or max((s.end for s in segments), default=0)
+    if start >= end:
+        raise ValueError("start must be before end")
+    if end > duration:
+        raise ValueError("end exceeds video duration")
+
+    cand = next((c for c in job.candidates if c.index == index), None)
+    if cand is None:
+        raise ValueError("candidate not found")
+    return source, segments, cand
+
+
 def recut_clip(
     job: ClipJob,
     index: int,
@@ -376,29 +448,7 @@ def recut_clip(
     req = job.request
     rr = recut_request
     work_dir = OUTPUTS_DIR / job.work_dir
-    source = next(work_dir.glob("source.*"), None)
-    if not source:
-        raise ValueError("source not available")
-
-    transcript_files = sorted(work_dir.glob("transcript*.json"), key=lambda p: p.stat().st_mtime)
-    if not transcript_files:
-        raise ValueError("no transcript")
-    rows = json.loads(transcript_files[-1].read_text(encoding="utf-8"))
-    segments = [TranscriptSegmentDC(**s) for s in rows]
-
-    if override_segments is not None and len(override_segments) == 0:
-        raise ValueError("segments must not be empty")
-
-    duration = probe_media_duration(source) or max((s.end for s in segments), default=0)
-
-    if start >= end:
-        raise ValueError("start must be before end")
-    if end > duration:
-        raise ValueError("end exceeds video duration")
-
-    cand = next((c for c in job.candidates if c.index == index), None)
-    if cand is None:
-        raise ValueError("candidate not found")
+    source, segments, cand = validate_recut(job, index, start, end, override_segments)
 
     dc_cand = ClipCandidateDC(
         index=index,
@@ -436,6 +486,9 @@ def recut_clip(
         outline_width=_pick(rr.caption_outline if rr else None, req.caption_outline),
         outline_color=_pick(rr.caption_outline_color if rr else None, req.caption_outline_color),
         style=_pick(rr.caption_style if rr else None, req.caption_style),
+        box_opacity=_pick(
+            rr.caption_box_opacity if rr else None, req.caption_box_opacity
+        ),
     )
     ai = AIConfig(enabled=False)
 
@@ -612,6 +665,8 @@ def build_clipper_command(request: ClipJobRequest) -> list[str]:
     command.extend(["--caption-outline", str(request.caption_outline)])
     command.extend(["--caption-outline-color", request.caption_outline_color])
     command.extend(["--caption-style", request.caption_style])
+    if request.caption_box_opacity is not None:
+        command.extend(["--caption-box-opacity", str(request.caption_box_opacity)])
     command.extend(["--transition", request.transition])
     if request.required_hashtags:
         cleaned = [tag.strip().lstrip("#") for tag in request.required_hashtags if tag.strip()]
@@ -666,13 +721,23 @@ def run_job(job_id: str) -> None:
             request = request.model_copy(update={"ai_api_key": secret})
 
         started_at = time.time()
-        set_job(job_id, status="running", error=None)
+        set_job(
+            job_id,
+            status="running",
+            error=None,
+            clips=[],
+            clips_expected=request.top,
+        )
         command = build_clipper_command(request)
         append_log(job_id, f"Command: {' '.join(command)}")
         print(f"[job {job_id}] Command: {' '.join(command)}", flush=True)
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        # The pipeline prints transcript and LLM text; without UTF-8 the frozen
+        # child encodes stdout as cp1252 and dies on the first non-Latin-1 char.
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
         if getattr(sys, "frozen", False):
             env.setdefault("SULTANCLIP_DATA_DIR", str(resolve_data_dir()))
             env["PYTHONNOUSERSITE"] = "1"
@@ -698,11 +763,21 @@ def run_job(job_id: str) -> None:
 
         logs: list[str] = []
         assert process.stdout is not None
+        published: list[str] = []
+        next_scan = 0.0
         for line in process.stdout:
             cleaned = line.rstrip()
             if cleaned:
                 logs.append(cleaned)
                 set_job(job_id, logs=logs[-120:])
+            now = time.time()
+            if now >= next_scan:
+                next_scan = now + CLIP_SCAN_INTERVAL_SECONDS
+                ready = discover_clips(started_at)
+                names = [item.name for item in ready]
+                if names != published:
+                    published = names
+                    set_job(job_id, clips=ready)
 
         code = process.wait()
         append_log(job_id, f"Pipeline exited (code: {code})")
@@ -759,8 +834,16 @@ def model_status() -> dict[str, str | bool | float | None]:
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict:
+    # app_version and crop_modes make a stale backend obvious: an orphaned old
+    # sidecar holding the port reports a different build than the app that asked.
+    return {
+        "status": "ok",
+        "app_version": os.environ.get("SULTANCLIP_APP_VERSION", "dev"),
+        "crop_modes": list(
+            get_args(ClipJobRequest.model_fields["crop_mode"].annotation)
+        ),
+    }
 
 
 class ModelsQuery(BaseModel):
@@ -772,11 +855,16 @@ class ModelsQuery(BaseModel):
 def list_models(query: ModelsQuery) -> dict[str, list[str]]:
     import urllib.request
 
+    from llm import resolve_base_url
+
     base = query.base_url.strip()
     if not base:
         raise HTTPException(status_code=400, detail="base_url is required")
 
-    base = base.replace("localhost", "host.docker.internal").replace("127.0.0.1", "host.docker.internal")
+    # Only rewrite localhost when actually running in Docker. The unconditional
+    # rewrite sent desktop users' "http://localhost:20128/v1" to a host that does
+    # not exist outside Docker, so every model list failed to resolve.
+    base = resolve_base_url(base)
     url = base.rstrip("/") + "/models"
     request = urllib.request.Request(url, method="GET")
     request.add_header("Accept", "application/json")
@@ -1036,7 +1124,7 @@ def get_job_timeline(job_id: str) -> TimelineData:
 
 
 @app.post("/api/jobs/{job_id}/recut")
-def recut_job(job_id: str, body: RecutRequest) -> dict[str, ClipFile | ClipCandidate]:
+def recut_job(job_id: str, body: RecutRequest) -> dict[str, str | int]:
     with jobs_lock:
         job = jobs.get(job_id)
     if not job:
@@ -1044,13 +1132,47 @@ def recut_job(job_id: str, body: RecutRequest) -> dict[str, ClipFile | ClipCandi
     if not job.work_dir:
         raise HTTPException(status_code=404, detail="Source not available")
 
+    if job.status == "running":
+        raise HTTPException(status_code=409, detail="This job is already rendering")
+
+    # Same checks the render would have made, run here so bad input still fails
+    # the request instead of surfacing asynchronously.
     try:
-        new_clip, new_cand = recut_clip(job, body.index, body.start, body.end, body.segments, body)
+        validate_recut(job, body.index, body.start, body.end, body.segments)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    new_clips = [new_clip if c.name == new_clip.name else c for c in job.clips]
-    new_cands = [new_cand if c.index == body.index else c for c in job.candidates]
-    set_job(job_id, clips=new_clips, candidates=new_cands)
+    set_job(job_id, status="running", recut_index=body.index, recut_error=None)
+    threading.Thread(target=run_recut, args=(job_id, body), daemon=True).start()
+    return {"status": "started", "index": body.index}
 
-    return {"clip": new_clip.model_dump(), "candidate": new_cand.model_dump()}
+
+def run_recut(job_id: str, body: RecutRequest) -> None:
+    """Re-render one clip, leaving the rest of the job untouched."""
+    try:
+        with jobs_lock:
+            job = jobs.get(job_id)
+        if not job:
+            return
+        new_clip, new_cand = recut_clip(
+            job, body.index, body.start, body.end, body.segments, body
+        )
+        new_clips = [new_clip if c.name == new_clip.name else c for c in job.clips]
+        new_cands = [new_cand if c.index == body.index else c for c in job.candidates]
+        set_job(
+            job_id,
+            status="completed",
+            clips=new_clips,
+            candidates=new_cands,
+            recut_index=None,
+            recut_error=None,
+        )
+    except Exception as exc:
+        # The job itself is still complete -- only this re-render failed, so the
+        # existing clips stay and the error is reported separately.
+        set_job(
+            job_id,
+            status="completed",
+            recut_index=None,
+            recut_error=str(exc),
+        )
