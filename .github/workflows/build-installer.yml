@@ -106,12 +106,50 @@ jobs:
             cat smoke.log
             exit 1
           fi
+          # A localhost endpoint is the desktop default, and it regressed
+          # separately from the HTTPS case above: api.py rewrote localhost ->
+          # host.docker.internal unconditionally, so only remote hosts worked.
+          cat > llm_stub.py <<'STUB'
+          import json
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+          class Handler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  body = json.dumps({"data": [{"id": "smoke-model"}]}).encode()
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def log_message(self, *args):
+                  pass
+
+
+          HTTPServer(("127.0.0.1", 20128), Handler).serve_forever()
+          STUB
+          python llm_stub.py &
+          STUB_PID=$!
+          trap 'kill $SMOKE_PID $STUB_PID 2>/dev/null || true' EXIT
+          sleep 2
+          LOCAL=$(curl -sf -m 20 -X POST http://127.0.0.1:8099/api/models             -H 'Content-Type: application/json'             -d '{"base_url":"http://localhost:20128/v1","api_key":""}') || true
+          if ! printf '%s' "$LOCAL" | grep -q 'smoke-model'; then
+            echo "::error::/api/models failed for a localhost endpoint (got: $LOCAL)"
+            cat smoke.log
+            exit 1
+          fi
           SCHEMA=$(curl -sf http://127.0.0.1:8099/openapi.json) || true
           if ! printf '%s' "$SCHEMA" | grep -q '"split"'; then
             echo "::error::crop_mode 'split' missing from OpenAPI schema"
             exit 1
           fi
-          echo "Smoke OK: health, /api/models over HTTPS, crop_mode enum includes split"
+          HEALTH=$(curl -sf http://127.0.0.1:8099/api/health) || true
+          if ! printf '%s' "$HEALTH" | grep -q '"split"'; then
+            echo "::error::/api/health does not advertise the crop_mode enum"
+            exit 1
+          fi
+          echo "Smoke OK: health+identity, /api/models over HTTPS and localhost, crop_mode includes split"
       - name: Stage backend onedir into Tauri resources
         shell: bash
         run: |

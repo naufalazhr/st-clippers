@@ -58,7 +58,38 @@ fn get_backend_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Erro
     .into())
 }
 
+/// Kill backends orphaned by a crash or force-quit.
+///
+/// `kill_backend` only runs on a clean window close, so a crashed run leaves the
+/// old sidecar holding port 8010. The freshly spawned backend then exits with
+/// "address already in use" while the app keeps talking to the stale build — which
+/// is how an upgraded app still answered with an old crop_mode enum and old
+/// bundled codecs. Only our own binary name is targeted.
+fn kill_orphan_backends() {
+    #[cfg(windows)]
+    let mut command = {
+        let mut c = Command::new("taskkill");
+        c.args(["/F", "/IM", "sultanclip-backend.exe"]);
+        c.creation_flags(CREATE_NO_WINDOW);
+        c
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut c = Command::new("pkill");
+        c.args(["-f", "sultanclip-backend"]);
+        c
+    };
+
+    if let Ok(status) = command.stdout(Stdio::null()).stderr(Stdio::null()).status() {
+        if status.success() {
+            println!("[tauri] Cleared an orphaned backend still holding the port");
+        }
+    }
+}
+
 fn spawn_backend(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    kill_orphan_backends();
+
     let backend_dir = get_backend_dir(app)?;
     let backend_exe = {
         let win = backend_dir.join("sultanclip-backend.exe");
@@ -73,6 +104,7 @@ fn spawn_backend(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let mut command = Command::new(&backend_exe);
     command
         .args(["--port", "8010"])
+        .env("SULTANCLIP_APP_VERSION", app.package_info().version.to_string())
         .current_dir(&backend_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -162,6 +194,13 @@ pub fn run() {
                 kill_backend(window.app_handle());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // CloseRequested alone misses quits that skip the window close path
+            // (Cmd+Q, app relaunch), which is what orphans the sidecar.
+            if let tauri::RunEvent::Exit = event {
+                kill_backend(app_handle);
+            }
+        });
 }
