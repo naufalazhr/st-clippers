@@ -1,9 +1,10 @@
 "use client";
 
 import { Edit3 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { getTimeline, recutClip } from "../../lib/apiClient";
+import { DEFAULT_BOX_OPACITY } from "../../lib/constants";
 import type { CaptionStyle, ClipJob, TimelineData, Transition, TranscriptSegment } from "../../types/clip.type";
 
 type EditCaptionDialogProps = {
@@ -31,24 +32,36 @@ const TRANSITION_OPTIONS: { value: Transition; label: string }[] = [
 
 export function EditCaptionDialog({ open, clipName, job, onClose, onSuccess }: EditCaptionDialogProps) {
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
+  // The job object is re-fetched every couple of seconds while this dialog is
+  // open, so anything read from it inside the loader effect has to go through a
+  // ref. Depending on job.candidates (a fresh array each poll) or on an inline
+  // onClose made the effect re-run constantly: it flipped back to the loading
+  // state and discarded whatever had been typed.
+  const jobRef = useRef(job);
+  jobRef.current = job;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editedSegments, setEditedSegments] = useState<Record<number, string>>({});
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("classic");
+  // null = follow the preset default (solid for boxed, translucent for highlight).
+  const [boxOpacity, setBoxOpacity] = useState<number | null>(null);
   const [transition, setTransition] = useState<Transition>("none");
 
   const match = clipName.match(/^clip_(\d+)_/);
   const clipIndex = match ? parseInt(match[1], 10) : -1;
+  const jobId = job.id;
 
   useEffect(() => {
     if (!open || clipIndex === -1) return;
 
     setLoading(true);
-    getTimeline(job.id)
+    getTimeline(jobId)
       .then((data) => {
         setTimeline(data);
         // Pre-fill segments from timeline
-        const candidate = job.candidates.find((c) => c.index === clipIndex);
+        const candidate = jobRef.current.candidates.find((c) => c.index === clipIndex);
         if (candidate) {
           const clipSegments = data.segments.filter(
             (seg) => seg.start >= candidate.start && seg.end <= candidate.end
@@ -62,10 +75,11 @@ export function EditCaptionDialog({ open, clipName, job, onClose, onSuccess }: E
       })
       .catch(() => {
         toast.error("Gagal memuat data timeline");
-        onClose();
+        onCloseRef.current();
       })
       .finally(() => setLoading(false));
-  }, [open, clipIndex, job.id, job.candidates, onClose]);
+    // Reload only when a different clip is opened -- not on every job refresh.
+  }, [open, clipIndex, jobId]);
 
   const handleOverlay = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -102,17 +116,20 @@ export function EditCaptionDialog({ open, clipName, job, onClose, onSuccess }: E
         end: candidate.end,
         segments: updatedSegments,
         caption_style: captionStyle,
+        caption_box_opacity: boxOpacity,
         transition,
       });
-      toast.success("Caption berhasil diperbarui");
-      onSuccess();
+      // The render runs in the background now, so close immediately and let the
+      // clip card show its progress instead of freezing this dialog.
+      toast.success("Perubahan disimpan, klip sedang dirender ulang...");
       onClose();
+      onSuccess();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal menyimpan perubahan");
     } finally {
       setSaving(false);
     }
-  }, [timeline, clipIndex, job, editedSegments, captionStyle, transition, onSuccess, onClose]);
+  }, [timeline, clipIndex, job, editedSegments, captionStyle, boxOpacity, transition, onSuccess, onClose]);
 
   if (!open) return null;
 
@@ -174,6 +191,24 @@ export function EditCaptionDialog({ open, clipName, job, onClose, onSuccess }: E
                     </button>
                   ))}
                 </div>
+
+                {(captionStyle === "boxed" || captionStyle === "highlight") && (
+                  <div className="editCaptionModal-boxOpacity">
+                    <label htmlFor="recutBoxOpacity">
+                      Opacity Box ({boxOpacity ?? DEFAULT_BOX_OPACITY[captionStyle]}%)
+                    </label>
+                    <input
+                      id="recutBoxOpacity"
+                      className="fontSlider"
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={boxOpacity ?? DEFAULT_BOX_OPACITY[captionStyle]}
+                      onChange={(event) => setBoxOpacity(Number(event.target.value))}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="editCaptionModal-section">

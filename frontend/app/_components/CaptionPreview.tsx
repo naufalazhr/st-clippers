@@ -1,6 +1,6 @@
 import type React from "react";
-import { CAPTION_FONTS } from "../../lib/constants";
-import type { CaptionFont, CaptionPosition, WatermarkPosition } from "../../types/clip.type";
+import { CAPTION_FONTS, DEFAULT_BOX_OPACITY } from "../../lib/constants";
+import type { CaptionFont, CaptionPosition, CaptionStyle, WatermarkPosition } from "../../types/clip.type";
 
 type WatermarkStyle = {
   type: "text" | "image";
@@ -20,7 +20,47 @@ type CaptionPreviewProps = {
   font: CaptionFont;
   outline: number;
   outlineColor: string;
+  /** Preset the clip is rendered with. Without this the preview looked
+   *  identical for every style, so switching styles appeared to do nothing. */
+  style?: CaptionStyle;
+  /** 0-100 opacity of the box behind boxed/highlight text. */
+  boxOpacity?: number | null;
   watermarkStyle?: WatermarkStyle;
+};
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  let value = hex.trim().replace("#", "");
+  if (value.length === 3) value = value.split("").map((c) => c + c).join("");
+  if (value.length !== 6) return `rgba(0, 0, 0, ${alpha})`;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+/** CSS that matches what build_subtitle_style() produces for each preset. */
+const presetCss = (
+  style: CaptionStyle,
+  outline: number,
+  outlineColor: string,
+  boxOpacity: number | null | undefined,
+): React.CSSProperties => {
+  if (style === "boxed" || style === "highlight") {
+    const percent = boxOpacity ?? DEFAULT_BOX_OPACITY[style] ?? 100;
+    return {
+      // BorderStyle=3: an opaque plate in OutlineColour, padded by Outline.
+      background: hexToRgba(outlineColor, Math.max(0, Math.min(100, percent)) / 100),
+      padding: `0.1em ${Math.max(0.15, outline * 0.12)}em`,
+      textShadow: "none",
+      boxDecorationBreak: "clone",
+      WebkitBoxDecorationBreak: "clone",
+    };
+  }
+  if (style === "shadow") {
+    return { textShadow: `2px 2px 3px ${hexToRgba(outlineColor, 0.9)}` };
+  }
+  if (style === "bold") {
+    return { textShadow: outlineShadow(outline + 1, outlineColor), fontWeight: 900 };
+  }
+  return { textShadow: outlineShadow(outline, outlineColor) };
 };
 
 const POSITION_STYLE: Record<WatermarkPosition, React.CSSProperties> = {
@@ -36,10 +76,13 @@ const POSITION_STYLE: Record<WatermarkPosition, React.CSSProperties> = {
 };
 
 const PREVIEW_HEIGHT = 320;
-// Calibrated against real ffmpeg output: at backend FontSize=30 the rendered
-// glyph cap-height is ~6.5% of the 1920px frame. This factor maps the backend
-// font size to an equivalent CSS px on the preview so they match visually.
-const FONT_CALIBRATION = 0.96;
+// libass renders the burned-in captions against the default ASS script height
+// (PlayResY=288), so a backend FontSize of N occupies N/288 of the frame height
+// whatever the output resolution. Matching that on a PREVIEW_HEIGHT-tall stage
+// means scaling by PREVIEW_HEIGHT/288 -- the previous hand-tuned 0.96 drew the
+// preview 14% smaller than the clip it was predicting.
+const ASS_SCRIPT_HEIGHT = 288;
+const FONT_CALIBRATION = PREVIEW_HEIGHT / ASS_SCRIPT_HEIGHT;
 const SAMPLE_TEXT = "Contoh caption di video kamu";
 
 function outlineShadow(width: number, color: string): string {
@@ -63,6 +106,8 @@ export function CaptionPreview({
   font,
   outline,
   outlineColor,
+  style = "classic",
+  boxOpacity,
   watermarkStyle,
 }: CaptionPreviewProps) {
   const scaledFont = fontSize * FONT_CALIBRATION;
@@ -81,7 +126,7 @@ export function CaptionPreview({
             fontSize: `${scaledFont}px`,
             color,
             fontFamily: fontCss,
-            textShadow: outlineShadow(outline, outlineColor),
+            ...presetCss(style, outline, outlineColor, boxOpacity),
           }}
         >
           {SAMPLE_TEXT}

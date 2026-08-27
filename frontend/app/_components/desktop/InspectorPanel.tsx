@@ -101,6 +101,8 @@ export function InspectorPanel(props: ControlPanelProps) {
             onCaptionOutlineChange={props.onCaptionOutlineChange}
             onCaptionOutlineColorChange={props.onCaptionOutlineColorChange}
             onCaptionStyleChange={props.onCaptionStyleChange}
+            captionBoxOpacity={props.captionBoxOpacity}
+            onCaptionBoxOpacityChange={props.onCaptionBoxOpacityChange}
           />
         </CollapseGroup>
 
@@ -169,6 +171,8 @@ export function InspectorPanel(props: ControlPanelProps) {
           font={props.captionFont}
           outline={props.captionOutline}
           outlineColor={props.captionOutlineColor}
+          style={props.captionStyle}
+          boxOpacity={props.captionBoxOpacity}
           watermarkStyle={watermarkStyleProp}
         />
       </div>

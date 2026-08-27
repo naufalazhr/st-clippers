@@ -39,6 +39,12 @@ export type ClipJob = {
   updated_at: string;
   logs: string[];
   clips: ClipFile[];
+  /** How many clips the pipeline was asked for; drives pending placeholders. */
+  clips_expected?: number | null;
+  /** Index of the clip currently being re-rendered by a recut, if any. */
+  recut_index?: number | null;
+  /** Error from the last recut, if it failed. */
+  recut_error?: string | null;
   candidates: ClipCandidate[];
   error: string | null;
   work_dir?: string | null;
@@ -62,6 +68,7 @@ export type ClipJob = {
     caption_outline: number;
     caption_outline_color: string;
     caption_style?: CaptionStyle;
+  caption_box_opacity?: number | null;
     transition?: Transition;
     ai_enabled: boolean;
     ai_base_url: string;
@@ -88,6 +95,7 @@ export type CreateClipJobInput = {
   caption_outline?: number;
   caption_outline_color?: string;
   caption_style?: CaptionStyle;
+  caption_box_opacity?: number | null;
   transition?: Transition;
   required_hashtags?: string[];
   ai_enabled?: boolean;

@@ -1,7 +1,8 @@
-import { Clipboard, Download, Edit3, ExternalLink, Scissors, Video } from "lucide-react";
-import { useState, useCallback } from "react";
+import toast from "react-hot-toast";
+import { Clipboard, Download, Edit3, ExternalLink, Loader2, Scissors, Video } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getOutputUrl, getTimeline, recutClip } from "../../lib/apiClient";
-import { clipTitle, handleCopyTitle, handleDownload } from "../../lib/utils";
+import { clipTitle, handleCopyTitle, handleDownload, pendingClipCount } from "../../lib/utils";
 import type { ClipFile, ClipJob, ClipCandidate, TimelineData } from "../../types/clip.type";
 import { EditCaptionDialog } from "./EditCaptionDialog";
 import { ThumbnailPrompt } from "./ThumbnailPrompt";
@@ -14,6 +15,21 @@ type ResultsSectionProps = {
 
 export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
   const clips = job?.clips ?? [];
+  // Clips are published as each one finishes, so the rest are still rendering.
+  const pendingCount = pendingClipCount(job?.status, job?.clips_expected, clips.length);
+  // A recut re-renders one existing clip in place; mark just that card busy.
+  const recutIndex = job?.status === "running" ? job?.recut_index ?? -1 : -1;
+
+  // Surface a failed background recut once, since the request itself succeeded.
+  const reportedRecutError = useRef<string | null>(null);
+  useEffect(() => {
+    const message = job?.recut_error ?? null;
+    if (message && reportedRecutError.current !== message) {
+      reportedRecutError.current = message;
+      toast.error(`Gagal render ulang klip: ${message}`);
+    }
+    if (!message) reportedRecutError.current = null;
+  }, [job?.recut_error]);
   const [expandedIndex, setExpandedIndex] = useState(-1);
   const [timelineCache, setTimelineCache] = useState<Record<string, TimelineData>>({});
   const [editCaptionClip, setEditCaptionClip] = useState<string | null>(null);
@@ -59,14 +75,20 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
     onJobRefresh();
   }, [onJobRefresh]);
 
+  const handleCloseCaptionDialog = useCallback(() => setEditCaptionClip(null), []);
+
   return (
     <section className="results">
       <div className="sectionHeader">
         <h2>Klip Siap Digunakan</h2>
-        <span className="sectionBadge">{clips.length} klip siap</span>
+        <span className="sectionBadge">
+          {pendingCount
+            ? `${clips.length} siap - ${pendingCount} diproses`
+            : `${clips.length} klip siap`}
+        </span>
       </div>
 
-      {clips.length ? (
+      {clips.length || pendingCount ? (
         <div className="clipGrid">
           {clips.map((clip) => {
             const title = clipTitle(clip.name);
@@ -76,8 +98,19 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
             const isEditing = idx === expandedIndex;
             const hasEditBtn = canEdit(clip.name);
 
+            const isRerendering = idx === recutIndex;
+
             return (
-              <article className="clipCard" key={clip.url}>
+              <article
+                className={`clipCard${isRerendering ? " clipCard--rerendering" : ""}`}
+                key={clip.url}
+              >
+                {isRerendering && (
+                  <div className="clipCard-rerenderOverlay">
+                    <Loader2 className="clipCard-pendingSpinner" size={26} />
+                    <span>Merender ulang...</span>
+                  </div>
+                )}
                 <video
                   controls
                   preload="metadata"
@@ -131,6 +164,16 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
               </article>
             );
           })}
+          {Array.from({ length: pendingCount }, (_, i) => (
+            <article className="clipCard clipCard--pending" key={`pending-${i}`}>
+              <div className="clipCard-pendingMedia" aria-hidden="true">
+                <Loader2 className="clipCard-pendingSpinner" size={28} />
+              </div>
+              <div className="clipInfo">
+                <h3>Klip {clips.length + i + 1} sedang dirender...</h3>
+              </div>
+            </article>
+          ))}
         </div>
       ) : (
         <div className="emptyState">
@@ -144,7 +187,7 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
           open={true}
           clipName={editCaptionClip}
           job={job}
-          onClose={() => setEditCaptionClip(null)}
+          onClose={handleCloseCaptionDialog}
           onSuccess={handleEditCaptionSuccess}
         />
       )}

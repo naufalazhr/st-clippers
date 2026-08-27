@@ -1,6 +1,6 @@
 "use client";
 
-import { CAPTION_FONT_SIZE_MAX, CAPTION_FONT_SIZE_MIN, CAPTION_FONTS } from "../../../lib/constants";
+import { CAPTION_FONT_SIZE_MAX, CAPTION_FONT_SIZE_MIN, CAPTION_FONTS, DEFAULT_BOX_OPACITY } from "../../../lib/constants";
 import type { CamCorner, CaptionFont, CaptionPosition, CaptionStyle, CropMode } from "../../../types/clip.type";
 
 type CropCaptionSectionProps = {
@@ -14,6 +14,7 @@ type CropCaptionSectionProps = {
   captionOutline: number;
   captionOutlineColor: string;
   captionStyle: CaptionStyle;
+  captionBoxOpacity: number | null;
   onCropModeChange: (mode: CropMode) => void;
   onCamCornerChange: (value: CamCorner) => void;
   onBurnSubtitlesChange: (value: boolean) => void;
@@ -24,6 +25,7 @@ type CropCaptionSectionProps = {
   onCaptionOutlineChange: (value: number) => void;
   onCaptionOutlineColorChange: (value: string) => void;
   onCaptionStyleChange: (value: CaptionStyle) => void;
+  onCaptionBoxOpacityChange: (value: number) => void;
 };
 
 const CAM_CORNER_OPTIONS: { value: CamCorner; label: string }[] = [
@@ -53,6 +55,7 @@ export function CropCaptionSection({
   captionOutline,
   captionOutlineColor,
   captionStyle,
+  captionBoxOpacity,
   onCropModeChange,
   onCamCornerChange,
   onBurnSubtitlesChange,
@@ -63,6 +66,7 @@ export function CropCaptionSection({
   onCaptionOutlineChange,
   onCaptionOutlineColorChange,
   onCaptionStyleChange,
+  onCaptionBoxOpacityChange,
 }: CropCaptionSectionProps) {
   return (
     <div className="sectionBody">
@@ -122,6 +126,24 @@ export function CropCaptionSection({
                   ))}
                 </div>
               </div>
+
+              {(captionStyle === "boxed" || captionStyle === "highlight") && (
+                <div className="segmentedField">
+                  <span>
+                    Opacity Box ({captionBoxOpacity ?? DEFAULT_BOX_OPACITY[captionStyle]}%)
+                  </span>
+                  <input
+                    className="fontSlider"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={captionBoxOpacity ?? DEFAULT_BOX_OPACITY[captionStyle]}
+                    onChange={(event) => onCaptionBoxOpacityChange(Number(event.target.value))}
+                    aria-label="Opacity box caption"
+                  />
+                </div>
+              )}
 
               <div className="segmentedField">
                 <span>Ukuran Font</span>
