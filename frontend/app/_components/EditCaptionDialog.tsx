@@ -1,7 +1,7 @@
 "use client";
 
 import { Edit3 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { getTimeline, recutClip } from "../../lib/apiClient";
 import type { CaptionStyle, ClipJob, TimelineData, Transition, TranscriptSegment } from "../../types/clip.type";
@@ -40,32 +40,35 @@ export function EditCaptionDialog({ open, clipName, job, onClose, onSuccess }: E
   const match = clipName.match(/^clip_(\d+)_/);
   const clipIndex = match ? parseInt(match[1], 10) : -1;
 
+  // Stable candidate lookup - avoids re-fetching when job.candidates reference changes
+  const candidate = useMemo(
+    () => job.candidates.find((c) => c.index === clipIndex),
+    [job.candidates, clipIndex]
+  );
+
   useEffect(() => {
-    if (!open || clipIndex === -1) return;
+    if (!open || clipIndex === -1 || !candidate) return;
 
     setLoading(true);
     getTimeline(job.id)
       .then((data) => {
         setTimeline(data);
         // Pre-fill segments from timeline
-        const candidate = job.candidates.find((c) => c.index === clipIndex);
-        if (candidate) {
-          const clipSegments = data.segments.filter(
-            (seg) => seg.start >= candidate.start && seg.end <= candidate.end
-          );
-          const init: Record<number, string> = {};
-          clipSegments.forEach((seg, i) => {
-            init[i] = seg.text;
-          });
-          setEditedSegments(init);
-        }
+        const clipSegments = data.segments.filter(
+          (seg) => seg.start >= candidate.start && seg.end <= candidate.end
+        );
+        const init: Record<number, string> = {};
+        clipSegments.forEach((seg, i) => {
+          init[i] = seg.text;
+        });
+        setEditedSegments(init);
       })
       .catch(() => {
         toast.error("Gagal memuat data timeline");
         onClose();
       })
       .finally(() => setLoading(false));
-  }, [open, clipIndex, job.id, job.candidates, onClose]);
+  }, [open, clipIndex, job.id, candidate, onClose]);
 
   const handleOverlay = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -116,7 +119,6 @@ export function EditCaptionDialog({ open, clipName, job, onClose, onSuccess }: E
 
   if (!open) return null;
 
-  const candidate = job.candidates.find((c) => c.index === clipIndex);
   const clipSegments = timeline?.segments.filter(
     (seg) => candidate && seg.start >= candidate.start && seg.end <= candidate.end
   ) ?? [];

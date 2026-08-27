@@ -925,6 +925,180 @@ a {
   cursor: not-allowed;
 }
 
+/* ── Edit trim modal ── */
+.editTrimDialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  padding: 24px;
+  backdrop-filter: blur(4px);
+}
+
+.editTrimDialog {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 960px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.editTrimDialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editTrimDialog-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.editTrimDialog-close {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.editTrimDialog-close:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.editTrimDialog-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editTrimDialog-body {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.editTrimDialog-body .timelineEditor {
+  margin-top: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  height: 100%;
+}
+
+.editTrimDialog-body .timelineEditorBody {
+  height: 100%;
+  max-height: calc(88vh - 70px);
+  padding: 20px 22px;
+}
+
+/* ── Results: two-column layout with sticky preview ── */
+.resultsLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+}
+
+.clipCard--active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft), var(--shadow-md);
+}
+
+.resultsPreview {
+  position: sticky;
+  top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+}
+
+.resultsPreview-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  max-height: 480px;
+}
+
+.resultsPreview-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.resultsPreview-meta h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.resultsPreview-fileName {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  word-break: break-all;
+}
+
+.resultsPreview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 12px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 1024px) {
+  .resultsLayout {
+    grid-template-columns: 1fr;
+  }
+  .resultsPreview {
+    position: static;
+    max-height: none;
+  }
+  .resultsPreview-frame {
+    max-height: 320px;
+  }
+}
+
 /* ── Clip action buttons ── */
 .clipActions a, .clipActions button {
   border: none;

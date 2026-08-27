@@ -1,11 +1,11 @@
 import { Clipboard, Download, Edit3, ExternalLink, Scissors, Video } from "lucide-react";
 import { useState, useCallback } from "react";
-import { getOutputUrl, getTimeline, recutClip } from "../../lib/apiClient";
+import { getOutputUrl, recutClip } from "../../lib/apiClient";
 import { clipTitle, handleCopyTitle, handleDownload } from "../../lib/utils";
-import type { ClipFile, ClipJob, ClipCandidate, TimelineData } from "../../types/clip.type";
+import type { ClipFile, ClipJob, ClipCandidate } from "../../types/clip.type";
 import { EditCaptionDialog } from "./EditCaptionDialog";
+import { EditTrimDialog } from "./EditTrimDialog";
 import { ThumbnailPrompt } from "./ThumbnailPrompt";
-import { TimelineEditor } from "./TimelineEditor";
 
 type ResultsSectionProps = {
   job: ClipJob | null;
@@ -14,33 +14,18 @@ type ResultsSectionProps = {
 
 export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
   const clips = job?.clips ?? [];
-  const [expandedIndex, setExpandedIndex] = useState(-1);
-  const [timelineCache, setTimelineCache] = useState<Record<string, TimelineData>>({});
   const [editCaptionClip, setEditCaptionClip] = useState<string | null>(null);
+  const [editTrimClip, setEditTrimClip] = useState<string | null>(null);
+  const [previewClipName, setPreviewClipName] = useState<string | null>(null);
 
-  const handleEditClip = useCallback(async (clipName: string, jobId: string) => {
-    const match = clipName.match(/^clip_(\d+)_/);
-    if (!match) return;
-    const idx = parseInt(match[1], 10);
-
-    // Load timeline data if not cached
-    if (!timelineCache[jobId]) {
-      try {
-        const data = await getTimeline(jobId);
-        setTimelineCache((prev) => ({ ...prev, [jobId]: data }));
-      } catch {
-        return; // source not available, button already hidden
-      }
-    }
-    setExpandedIndex(idx);
-  }, [timelineCache]);
-
-  const handleRecut = useCallback(async (index: number, start: number, end: number) => {
-    if (!job) return;
-    await recutClip(job.id, { index, start, end });
-    setExpandedIndex(-1);
-    onJobRefresh();
-  }, [job, onJobRefresh]);
+  const handleRecut = useCallback(
+    async (index: number, start: number, end: number) => {
+      if (!job) return;
+      await recutClip(job.id, { index, start, end });
+      onJobRefresh();
+    },
+    [job, onJobRefresh]
+  );
 
   const canEdit = (clipName: string) => {
     if (!job?.work_dir) return false;
@@ -55,9 +40,21 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
     setEditCaptionClip(clipName);
   }, []);
 
+  const handleEditTrim = useCallback((clipName: string) => {
+    setEditTrimClip(clipName);
+  }, []);
+
   const handleEditCaptionSuccess = useCallback(() => {
     onJobRefresh();
   }, [onJobRefresh]);
+
+  const handleEditTrimSuccess = useCallback(() => {
+    onJobRefresh();
+  }, [onJobRefresh]);
+
+  const previewClip = previewClipName
+    ? clips.find((c) => c.name === previewClipName) ?? null
+    : null;
 
   return (
     <section className="results">
@@ -67,70 +64,93 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
       </div>
 
       {clips.length ? (
-        <div className="clipGrid">
-          {clips.map((clip) => {
-            const title = clipTitle(clip.name);
-            const url = getOutputUrl(clip.url);
-            const match = clip.name.match(/^clip_(\d+)_/);
-            const idx = match ? parseInt(match[1], 10) : -1;
-            const isEditing = idx === expandedIndex;
-            const hasEditBtn = canEdit(clip.name);
+        <div className="resultsLayout">
+          <div className="clipGrid">
+            {clips.map((clip) => {
+              const title = clipTitle(clip.name);
+              const url = getOutputUrl(clip.url);
+              const hasEditBtn = canEdit(clip.name);
+              const isPreviewing = clip.name === previewClipName;
 
-            return (
-              <article className="clipCard" key={clip.url}>
-                <video
-                  controls
-                  preload="metadata"
-                  src={url}
-                  poster={clip.thumbnail_url ? getOutputUrl(clip.thumbnail_url) : undefined}
-                />
-                <div className="clipInfo">
-                  <h3>{title}</h3>
-                  <button
-                    className="copyTitleButton"
-                    type="button"
-                    onClick={() => handleCopyTitle(title)}
-                    title="Salin judul klip"
-                  >
-                    <Clipboard size={14} />
-                    Copy
-                  </button>
-                </div>
-                <div className="clipActions">
-                  <a href={url} target="_blank" rel="noreferrer">
-                    <ExternalLink size={16} />
-                    Buka
-                  </a>
-                  <button type="button" onClick={() => handleDownload(url, clip.name)}>
-                    <Download size={16} />
-                    Unduh
-                  </button>
-                  {hasEditBtn && (
-                    <>
-                      <button type="button" onClick={() => handleEditClip(clip.name, job!.id)}>
-                        <Scissors size={16} />
-                        Edit Trim
-                      </button>
-                      <button type="button" onClick={() => handleEditCaption(clip.name)}>
-                        <Edit3 size={16} />
-                        Edit Caption
-                      </button>
-                    </>
-                  )}
-                </div>
-                <ThumbnailPrompt clip={clip} />
-                {isEditing && job && timelineCache[job.id] && (
-                  <TimelineEditor
-                    jobId={job.id}
-                    candidate={job.candidates.find((c) => c.index === idx)!}
-                    timeline={timelineCache[job.id]}
-                    onRecut={handleRecut}
-                    onClose={() => setExpandedIndex(-1)}
+              return (
+                <article
+                  className={`clipCard${isPreviewing ? " clipCard--active" : ""}`}
+                  key={clip.url}
+                  onMouseEnter={() => setPreviewClipName(clip.name)}
+                  onFocus={() => setPreviewClipName(clip.name)}
+                >
+                  <video
+                    controls
+                    preload="metadata"
+                    src={url}
+                    poster={clip.thumbnail_url ? getOutputUrl(clip.thumbnail_url) : undefined}
                   />
-                )}
-              </article>
-            );
-          })}
+                  <div className="clipInfo">
+                    <h3>{title}</h3>
+                    <button
+                      className="copyTitleButton"
+                      type="button"
+                      onClick={() => handleCopyTitle(title)}
+                      title="Salin judul klip"
+                    >
+                      <Clipboard size={14} />
+                      Copy
+                    </button>
+                  </div>
+                  <div className="clipActions">
+                    <a href={url} target="_blank" rel="noreferrer">
+                      <ExternalLink size={16} />
+                      Buka
+                    </a>
+                    <button type="button" onClick={() => handleDownload(url, clip.name)}>
+                      <Download size={16} />
+                      Unduh
+                    </button>
+                    {hasEditBtn && (
+                      <>
+                        <button type="button" onClick={() => handleEditTrim(clip.name)}>
+                          <Scissors size={16} />
+                          Edit Trim
+                        </button>
+                        <button type="button" onClick={() => handleEditCaption(clip.name)}>
+                          <Edit3 size={16} />
+                          Edit Caption
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <ThumbnailPrompt clip={clip} />
+                </article>
+              );
+            })}
+          </div>
+
+          <aside className="resultsPreview">
+            {previewClip ? (
+              <>
+                <div className="resultsPreview-frame">
+                  <video
+                    key={previewClip.url}
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    src={getOutputUrl(previewClip.url)}
+                    poster={previewClip.thumbnail_url ? getOutputUrl(previewClip.thumbnail_url) : undefined}
+                  />
+                </div>
+                <div className="resultsPreview-meta">
+                  <h4>{clipTitle(previewClip.name)}</h4>
+                  <p className="resultsPreview-fileName">{previewClip.name}</p>
+                </div>
+              </>
+            ) : (
+              <div className="resultsPreview-empty">
+                <Video size={28} />
+                <p>Hover sebuah klip untuk preview di sini</p>
+              </div>
+            )}
+          </aside>
         </div>
       ) : (
         <div className="emptyState">
@@ -146,6 +166,16 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
           job={job}
           onClose={() => setEditCaptionClip(null)}
           onSuccess={handleEditCaptionSuccess}
+        />
+      )}
+
+      {job && editTrimClip && (
+        <EditTrimDialog
+          open={true}
+          clipName={editTrimClip}
+          job={job}
+          onClose={() => setEditTrimClip(null)}
+          onSuccess={handleEditTrimSuccess}
         />
       )}
     </section>
