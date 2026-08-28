@@ -67,7 +67,44 @@ def _content_from_response(raw: str) -> str:
                 continue
     if not isinstance(payload, dict):
         raise ValueError("LLM response was not valid JSON")
-    return payload["choices"][0]["message"]["content"]
+
+    choices = payload.get("choices") or []
+    if not choices:
+        raise ValueError("LLM response contained no choices")
+    message = choices[0].get("message") or {}
+    return _text_from_message(message)
+
+
+def _text_from_message(message: dict) -> str:
+    """Pull the assistant text out of a chat message.
+
+    "content" is not always a plain string:
+      * reasoning models (nemotron, deepseek-r1, ...) can return content=null and
+        put the answer in "reasoning"/"reasoning_content";
+      * some providers return a list of typed parts instead of a string.
+    Returning None here fed it straight into a regex, which failed with the
+    opaque "expected string or bytes-like object, got 'NoneType'".
+    """
+    content = message.get("content")
+
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") in (None, "text")
+        )
+
+    if isinstance(content, str) and content.strip():
+        return content
+
+    for key in ("reasoning_content", "reasoning"):
+        fallback = message.get(key)
+        if isinstance(fallback, str) and fallback.strip():
+            return fallback
+
+    if refusal := message.get("refusal"):
+        raise ValueError(f"LLM refused the request: {refusal}")
+    raise ValueError("LLM returned an empty message")
 
 
 def _loads_lenient(text: str) -> dict:

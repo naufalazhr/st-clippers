@@ -99,7 +99,15 @@ export type ModelStatus = {
 };
 
 export const fetchModelStatus = async () => {
-  const response = await fetch(`${API_BASE}/api/model-status`, { cache: "no-store" });
+  // The backend takes a few seconds to bind on a cold start, so this poll runs
+  // before it is listening. Report that as null (the caller retries on null)
+  // instead of letting the rejection escape as an unhandled error.
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/model-status`, { cache: "no-store" });
+  } catch {
+    return null;
+  }
   if (!response.ok) {
     return null;
   }
@@ -109,8 +117,9 @@ export const fetchModelStatus = async () => {
 export const getOutputUrl = (path: string) => `${API_BASE}${path}`;
 
 export type RecutResponse = {
-  clip: ClipFile;
-  candidate: ClipCandidate;
+  /** The render runs in the background; poll the job for progress. */
+  status: string;
+  index: number;
 };
 
 export const getTimeline = async (jobId: string): Promise<TimelineData> => {
@@ -133,7 +142,7 @@ export const uploadWatermarkImage = async (jobId: string, file: File): Promise<{
   return response.json() as Promise<{ url: string }>;
 };
 
-export const recutClip = async (jobId: string, body: { index: number; start: number; end: number; segments?: { start: number; end: number; text: string }[]; caption_style?: string; transition?: string }): Promise<RecutResponse> => {
+export const recutClip = async (jobId: string, body: { index: number; start: number; end: number; segments?: { start: number; end: number; text: string }[]; caption_style?: string; caption_box_opacity?: number | null; transition?: string }): Promise<RecutResponse> => {
   const response = await fetch(`${CLIENT_API_BASE}/api/jobs/${jobId}/recut`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

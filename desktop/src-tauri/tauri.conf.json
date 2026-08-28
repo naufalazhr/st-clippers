@@ -4,7 +4,7 @@
   "identifier": "com.sultantech.sultanclip",
   "build": {
     "frontendDist": "../../frontend/out",
-    "devUrl": "http://localhost:3000",
+    "devUrl": "http://127.0.0.1:3000",
     "beforeDevCommand": "cd ../frontend && npm run dev",
     "beforeBuildCommand": "cd ../frontend && npm run build"
   },

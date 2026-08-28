@@ -37,11 +37,13 @@ export type ControlPanelProps = {
   captionOutline: number;
   captionOutlineColor: string;
   captionStyle: CaptionStyle;
+  captionBoxOpacity: number | null;
   transition: Transition;
   onCaptionFontChange: (value: CaptionFont) => void;
   onCaptionOutlineChange: (value: number) => void;
   onCaptionOutlineColorChange: (value: string) => void;
   onCaptionStyleChange: (value: CaptionStyle) => void;
+  onCaptionBoxOpacityChange: (value: number) => void;
   onTransitionChange: (value: Transition) => void;
   aiEnabled: boolean;
   aiBaseUrl: string;
@@ -147,6 +149,8 @@ export function ControlPanel(props: ControlPanelProps) {
         onCaptionOutlineChange={props.onCaptionOutlineChange}
         onCaptionOutlineColorChange={props.onCaptionOutlineColorChange}
         onCaptionStyleChange={props.onCaptionStyleChange}
+        captionBoxOpacity={props.captionBoxOpacity}
+        onCaptionBoxOpacityChange={props.onCaptionBoxOpacityChange}
       />
       {props.burnSubtitles ? (
         <CaptionPreview
@@ -156,6 +160,8 @@ export function ControlPanel(props: ControlPanelProps) {
           font={props.captionFont}
           outline={props.captionOutline}
           outlineColor={props.captionOutlineColor}
+          style={props.captionStyle}
+          boxOpacity={props.captionBoxOpacity}
         />
       ) : null}
 

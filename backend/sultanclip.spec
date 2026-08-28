@@ -19,6 +19,9 @@ a = Analysis(
         "uvicorn.lifespan", "uvicorn.lifespan.on",
         "faster_whisper", "ctranslate2", "yt_dlp", "multipart",
         "clipper", "model_cache", "llm", "safe_path",
+        # Without hf_xet the model download falls back to a single long
+        # HTTP stream, which Windows security software aborts mid-transfer.
+        "hf_xet",
         # urllib lazily imports these codecs for HTTPS hostnames; PyInstaller
         # misses them -> "unknown encoding: idna" at runtime in frozen builds
         "encodings.idna", "encodings.punycode",

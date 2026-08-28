@@ -22,7 +22,9 @@ from llm import AIConfig, chat_completion, extract_json
 from safe_path import prune_unresolvable_path_entries
 
 
-console = Console()
+# legacy_windows=False keeps rich writing through sys.stdout instead of the
+# Win32 console API, which encodes as cp1252 and crashes on non-Latin-1 text.
+console = Console(legacy_windows=False)
 
 # Must run before the first yt-dlp extraction; see safe_path for why.
 for _dropped in prune_unresolvable_path_entries():
@@ -896,6 +898,10 @@ def extract_audio(video_path: Path, audio_path: Path, force: bool = False, limit
     return audio_path
 
 
+# How often to report transcription progress, in percent of audio duration.
+TRANSCRIBE_REPORT_STEP_PERCENT = 5
+
+
 def transcribe(audio_path: Path, transcript_path: Path, model_name: str, language: str, force: bool = False) -> list[TranscriptSegment]:
     if transcript_path.exists() and not force:
         return [
@@ -908,12 +914,28 @@ def transcribe(audio_path: Path, transcript_path: Path, model_name: str, languag
         ]
 
     from faster_whisper import WhisperModel
-    from model_cache import ensure_model, resolve_data_dir
+    from model_cache import ModelDownloadError, ensure_model, resolve_data_dir
 
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
-    local_path = ensure_model(model_name, resolve_data_dir())
+    # CTranslate2 takes its intra-op thread count from OMP_NUM_THREADS, so
+    # pinning it to 1 ran transcription on a single core (~8% of a 12-core
+    # machine). Measured on this model (small, int8, 60s of speech): 1 thread
+    # 36.8s, 4 threads 17.2s, 8 threads 16.8s, 12 threads 17.4s -- it plateaus
+    # around 4, so cap at 8 and leave a couple of cores for ffmpeg and the UI.
+    cpu_threads = max(1, min(8, (os.cpu_count() or 4) - 2))
+    os.environ.setdefault("OMP_NUM_THREADS", str(cpu_threads))
+    try:
+        local_path = ensure_model(model_name, resolve_data_dir())
+    except ModelDownloadError as exc:
+        # Surface the actionable message; a bare raise dumped an httpx traceback
+        # into the job log and killed the frozen process with "Failed to execute
+        # script 'main'".
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
     console.print(f"[bold]Loading model:[/bold] {model_name}")
-    model = WhisperModel(local_path, device="cpu", compute_type="int8")
+    model = WhisperModel(
+        local_path, device="cpu", compute_type="int8", cpu_threads=cpu_threads
+    )
+    console.print(f"[dim]Transcribing with {cpu_threads} CPU threads[/dim]")
     segments, info = model.transcribe(
         str(audio_path),
         language=language,
@@ -922,11 +944,21 @@ def transcribe(audio_path: Path, transcript_path: Path, model_name: str, languag
         best_of=1,
     )
 
+    # Segments stream in as they are decoded. Without this the longest step in
+    # the pipeline printed nothing at all until it finished.
+    total_seconds = getattr(info, "duration", None) or 0.0
+    next_report = TRANSCRIBE_REPORT_STEP_PERCENT
+
     rows: list[TranscriptSegment] = []
     for segment in segments:
         text = clean_transcript_text(segment.text)
         if text:
             rows.append(TranscriptSegment(float(segment.start), float(segment.end), text))
+        if total_seconds:
+            percent = min(100.0, segment.end / total_seconds * 100)
+            if percent >= next_report:
+                console.print(f"[cyan]Transcribing[/cyan] {percent:.0f}%")
+                next_report = percent + TRANSCRIBE_REPORT_STEP_PERCENT
 
     save_json(transcript_path, [asdict(item) for item in rows])
     console.print(f"[green]Transcribed[/green] {len(rows)} segments. Detected language: {getattr(info, 'language', language)}")
@@ -1228,6 +1260,9 @@ class CaptionStyle:
     outline_width: float = 2.0
     outline_color: str = "#000000"
     style: CaptionStylePreset = "classic"
+    # 0-100 opacity of the box drawn behind "boxed"/"highlight" text.
+    # None keeps the preset's own default.
+    box_opacity: int | None = None
 
 
 def _hex_to_ass_color(hex_color: str, opacity: float = 1.0) -> str:
@@ -1241,6 +1276,35 @@ def _hex_to_ass_color(hex_color: str, opacity: float = 1.0) -> str:
     # fully transparent, so opacity maps inversely onto the leading byte.
     alpha = max(0, min(255, round((1.0 - opacity) * 255)))
     return f"&H{alpha:02X}{blue}{green}{red}".upper()
+
+
+# BorderStyle=3 uses Outline as the box padding; below this the box vanishes.
+BOX_PADDING_MIN = 2.0
+
+# Default box opacity per preset, as a percentage. "boxed" is a solid backing
+# plate -- it used to be 60%, which read as washed out and is why a black box
+# still looked transparent. "highlight" is deliberately see-through.
+DEFAULT_BOX_OPACITY = {"boxed": 100, "highlight": 45}
+
+
+def resolve_box_opacity(preset: str, requested: int | None) -> float:
+    """Box opacity as a 0..1 fraction, falling back to the preset default."""
+    percent = requested if requested is not None else DEFAULT_BOX_OPACITY.get(preset, 100)
+    return max(0, min(100, int(percent))) / 100.0
+
+
+def ffmpeg_filter_path(path: Path) -> str:
+    """Quote a filesystem path for use as an ffmpeg filter option value.
+
+    Filter options are colon-separated, so a Windows drive letter has to be
+    escaped and the value quoted, or the graph fails to parse.
+    """
+    text = str(path).replace("\\", "/").replace("'", "\'").replace(":", "\:")
+    return f"'{text}'"
+
+
+def subtitle_fonts_dir() -> Path:
+    return frozen_base() / "fonts"
 
 
 def build_subtitle_style(caption: CaptionStyle) -> str:
@@ -1261,13 +1325,14 @@ def build_subtitle_style(caption: CaptionStyle) -> str:
         margin_v = 0
     preset = caption.style if caption.style in CAPTION_STYLE_PRESETS else "classic"
     if preset in ("boxed", "highlight"):
-        # BorderStyle=3 draws an opaque box behind the text using BackColour.
-        # ASS alpha is inverted (00 = opaque), so a 60%/40% opaque box becomes
-        # alpha 0x66/0x99. Outline doubles as the box padding, hence 0, and no
-        # drop shadow on top of a box.
-        box_opacity = 0.6 if preset == "boxed" else 0.4
-        back_colour = _hex_to_ass_color(caption.outline_color, opacity=box_opacity)
-        tail = f"BackColour={back_colour},BorderStyle=3,Outline=0,Shadow=0,"
+        # BorderStyle=3 draws an opaque box, but libass paints it with
+        # OutlineColour -- BackColour only tints the drop shadow. Outline doubles
+        # as the box padding, so Outline=0 drew no box at all, which is why
+        # "boxed" and "highlight" used to render pixel-identically.
+        # ASS alpha is inverted (00 = opaque), so 0.6/0.4 opacity -> 0x66/0x99.
+        opacity = resolve_box_opacity(preset, caption.box_opacity)
+        outline_color = _hex_to_ass_color(caption.outline_color, opacity=opacity)
+        tail = f"BorderStyle=3,Outline={max(BOX_PADDING_MIN, outline):.1f},Shadow=0,"
     elif preset == "bold":
         outline = min(8.0, outline + 1.0)
         tail = f"BorderStyle=1,Outline={outline},Shadow=1,"
@@ -1425,7 +1490,10 @@ def generate_thumbnail_prompt(clip: ClipCandidate, config: AIConfig) -> dict | N
         )
         parsed = extract_json(content)
     except Exception as exc:
-        console.print(f"[yellow]Thumbnail prompt failed for clip {clip.index}, using fallback:[/yellow] {exc}")
+        console.print(
+            f"[yellow]Thumbnail prompt failed for clip {clip.index}, using fallback:[/yellow] {exc}"
+            f"{describe_bad_response(locals().get('content'))}"
+        )
         return {
             "hook_text": fallback_hook,
             "prompt": (
@@ -1459,6 +1527,20 @@ def _normalize_hashtag(tag: str) -> str:
     return f"#{cleaned}" if cleaned else ""
 
 
+def describe_bad_response(content: object, limit: int = 160) -> str:
+    """Summarise an unusable LLM reply for the job log.
+
+    Without this the log only said "Expecting value: line 1 column 30", which
+    does not distinguish a model that returned prose (reasoning models answer
+    with their thinking when content comes back null) from one that returned
+    malformed JSON.
+    """
+    if not isinstance(content, str) or not content.strip():
+        return " (model returned no text)"
+    snippet = " ".join(content.split())[:limit]
+    return f" | model replied: {snippet!r}"
+
+
 def generate_social_caption(
     clip: ClipCandidate, config: AIConfig, required_hashtags: list[str] | None = None
 ) -> str | None:
@@ -1484,7 +1566,10 @@ def generate_social_caption(
         )
         parsed = extract_json(content)
     except Exception as exc:
-        console.print(f"[yellow]Social caption failed for clip {clip.index}:[/yellow] {exc}")
+        console.print(
+            f"[yellow]Social caption failed for clip {clip.index}:[/yellow] {exc}"
+            f"{describe_bad_response(locals().get('content'))}"
+        )
         return None
 
     if not isinstance(parsed, dict):
@@ -1568,9 +1653,13 @@ def export_clip(
         vf = vertical_crop_filter(video_path, clip, crop_mode)
     if burn_subtitles and clip_segments:
         style = build_subtitle_style(caption or CaptionStyle())
+        # Without fontsdir libass resolves FontName through fontconfig, which
+        # knows nothing about the fonts shipped inside the app -- every choice
+        # silently fell back to the same default face.
         vf = (
             f"{vf},subtitles='{srt_path.name}'"
             ":original_size=1080x1920"
+            f":fontsdir={ffmpeg_filter_path(subtitle_fonts_dir())}"
             f":force_style='{style}'"
         )
 
@@ -1836,6 +1925,12 @@ def parse_args() -> argparse.Namespace:
         help="Caption preset: classic, bold, boxed (opaque box), highlight (translucent box), shadow",
     )
     parser.add_argument(
+        "--caption-box-opacity",
+        type=int,
+        default=None,
+        help="Opacity 0-100 of the box behind boxed/highlight captions",
+    )
+    parser.add_argument(
         "--transition",
         choices=list(TRANSITIONS),
         default="none",
@@ -1953,6 +2048,7 @@ def main() -> int:
         outline_width=args.caption_outline,
         outline_color=args.caption_outline_color,
         style=args.caption_style,
+        box_opacity=args.caption_box_opacity,
     )
 
     wm: WatermarkStyle | None = None

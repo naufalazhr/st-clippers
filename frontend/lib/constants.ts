@@ -41,3 +41,15 @@ export const statusIcon: Record<JobStatus, LucideIcon> = {
   completed: CheckCircle2,
   failed: XCircle,
 };
+
+/** The frozen backend takes a few seconds to bind on a cold start, so the first
+ *  history load usually races it. Keep retrying rather than showing an empty
+ *  history for the rest of the session. */
+export const HISTORY_RETRY_ATTEMPTS = 20;
+export const HISTORY_RETRY_DELAY_MS = 1500;
+
+/** Mirrors DEFAULT_BOX_OPACITY in backend/clipper.py. */
+export const DEFAULT_BOX_OPACITY: Record<string, number> = {
+  boxed: 100,
+  highlight: 45,
+};

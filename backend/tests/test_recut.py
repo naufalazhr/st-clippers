@@ -9,6 +9,20 @@ from fastapi.testclient import TestClient
 from api import app, ClipJob, ClipJobRequest, ClipCandidate, ClipFile, jobs, jobs_lock
 
 
+class _InlineThread:
+    """Run a background target synchronously so tests stay deterministic.
+
+    The recut endpoint hands the render to a thread; these tests care about what
+    it does, not that it is concurrent.
+    """
+
+    def __init__(self, target, args=(), kwargs=None, daemon=None):
+        self._target, self._args, self._kwargs = target, args, kwargs or {}
+
+    def start(self):
+        self._target(*self._args, **self._kwargs)
+
+
 @pytest.fixture(autouse=True)
 def clear_jobs():
     with jobs_lock:
@@ -47,17 +61,21 @@ def test_recut_candidate_rebuild():
     py_cand = ClipCandidate(index=0, start=0, end=5, duration=5, score=50, title="My Title", reason="good", text="hello world")
     py_clip = ClipFile(name="clip_00_test.mp4", url="/outputs/x", size_bytes=100)
 
-    with unittest.mock.patch("api.recut_clip", return_value=(py_clip, py_cand)):
+    with unittest.mock.patch("api.recut_clip", return_value=(py_clip, py_cand)),          unittest.mock.patch("api.validate_recut", return_value=(None, [], py_cand)),          unittest.mock.patch("api.threading.Thread", _InlineThread):
         client = TestClient(app)
         resp = client.post("/api/jobs/test2/recut", json={"index": 0, "start": 0, "end": 5})
 
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["candidate"]["start"] == 0
-    assert data["candidate"]["end"] == 5
-    assert data["candidate"]["duration"] == 5
-    assert data["candidate"]["score"] == 50
-    assert data["candidate"]["title"] == "My Title"
+    assert resp.json() == {"status": "started", "index": 0}
+
+    # The rebuilt candidate is applied to the job by the background render.
+    with jobs_lock:
+        cand = jobs["test2"].candidates[0]
+    assert cand.start == 0
+    assert cand.end == 5
+    assert cand.duration == 5
+    assert cand.score == 50
+    assert cand.title == "My Title"
 
 
 def test_recut_endpoint_404_unknown_job():
@@ -189,7 +207,7 @@ def test_recut_without_segments_regression():
             work_dir="some-slug",
         )
 
-    with unittest.mock.patch("api.recut_clip", return_value=(py_clip, py_cand)) as mock_recut:
+    with unittest.mock.patch("api.recut_clip", return_value=(py_clip, py_cand)) as mock_recut,          unittest.mock.patch("api.validate_recut", return_value=(None, [], py_cand)),          unittest.mock.patch("api.threading.Thread", _InlineThread):
         client = TestClient(app)
         resp = client.post("/api/jobs/compat_test/recut", json={"index": 0, "start": 2, "end": 8})
 

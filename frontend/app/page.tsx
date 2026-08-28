@@ -27,10 +27,12 @@ import {
   DEFAULT_MIN_DURATION,
   DEFAULT_MODEL,
   DEFAULT_TRANSITION,
+  HISTORY_RETRY_ATTEMPTS,
+  HISTORY_RETRY_DELAY_MS,
   JOB_POLL_INTERVAL_MS,
   RECENT_LOG_LIMIT,
 } from "../lib/constants";
-import { isActiveJob } from "../lib/utils";
+import { isActiveJob, loadWithRetry } from "../lib/utils";
 import type {
   CamCorner,
   CaptionFont,
@@ -83,6 +85,8 @@ export default function HomePage() {
   const [captionOutline, setCaptionOutline] = useState(DEFAULT_CAPTION_OUTLINE);
   const [captionOutlineColor, setCaptionOutlineColor] = useState(DEFAULT_CAPTION_OUTLINE_COLOR);
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
+  // null = use the preset default (solid for boxed, translucent for highlight).
+  const [captionBoxOpacity, setCaptionBoxOpacity] = useState<number | null>(null);
   const [transition, setTransition] = useState<Transition>(DEFAULT_TRANSITION);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiBaseUrl, setAiBaseUrl] = useState(DEFAULT_AI_BASE_URL);
@@ -167,13 +171,29 @@ export default function HomePage() {
      setError("");
    }, []);
 
+   // Retry the first history load: the backend is usually still starting up
+   // when the window appears, and a single swallowed failure left the history
+   // permanently empty even though the jobs were on disk all along.
    useEffect(() => {
-     loadJobs().catch(() => undefined);
+     let cancelled = false;
+     loadWithRetry(loadJobs, {
+       attempts: HISTORY_RETRY_ATTEMPTS,
+       delayMs: HISTORY_RETRY_DELAY_MS,
+       isCancelled: () => cancelled,
+     });
+     return () => {
+       cancelled = true;
+     };
    }, [loadJobs]);
 
-   // Poll active job for status updates
+   // Poll only while there is something to watch. Keying the effect on the
+   // status means it stops when the job settles (no more pointless re-renders
+   // resetting open editors) and starts again when a recut sets it back to
+   // "running".
+   const activeStatus = job?.status;
    useEffect(() => {
      if (!activeJobId) return;
+     if (activeStatus !== "running" && activeStatus !== "queued") return;
 
      const interval = window.setInterval(async () => {
        try {
@@ -189,7 +209,7 @@ export default function HomePage() {
      }, JOB_POLL_INTERVAL_MS);
 
      return () => window.clearInterval(interval);
-   }, [activeJobId, loadJobs]);
+   }, [activeJobId, activeStatus, loadJobs]);
 
    const handleLoadModels = useCallback(async () => {
     const base = aiBaseUrl.trim();
@@ -333,6 +353,7 @@ export default function HomePage() {
           caption_outline: captionOutline,
           caption_outline_color: captionOutlineColor,
           caption_style: captionStyle,
+          caption_box_opacity: captionBoxOpacity,
           transition,
           required_hashtags: requiredHashtags,
           ai_enabled: aiEnabled,
@@ -455,6 +476,8 @@ export default function HomePage() {
                captionOutline={captionOutline}
                captionOutlineColor={captionOutlineColor}
                captionStyle={captionStyle}
+               captionBoxOpacity={captionBoxOpacity}
+               onCaptionBoxOpacityChange={setCaptionBoxOpacity}
                transition={transition}
                onCaptionFontChange={setCaptionFont}
                onCaptionOutlineChange={setCaptionOutline}
@@ -569,6 +592,8 @@ export default function HomePage() {
                  captionOutline={captionOutline}
                  captionOutlineColor={captionOutlineColor}
                  captionStyle={captionStyle}
+               captionBoxOpacity={captionBoxOpacity}
+               onCaptionBoxOpacityChange={setCaptionBoxOpacity}
                  transition={transition}
                  onCaptionFontChange={setCaptionFont}
                  onCaptionOutlineChange={setCaptionOutline}
