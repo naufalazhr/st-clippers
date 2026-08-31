@@ -96,3 +96,31 @@ export const loadWithRetry = async (
   }
   return false;
 };
+
+
+/** How many segments of the virality meter are lit, out of TOTAL. */
+export const VIRALITY_SEGMENTS = 10;
+
+export type ViralityTier = {
+  /** Token suffix used for the meter and accent colour. */
+  key: "strong" | "good" | "fair" | "weak";
+  /** Plain-language verdict shown beside the number. */
+  label: string;
+  /** Lit segments, 0..VIRALITY_SEGMENTS. */
+  segments: number;
+};
+
+/**
+ * Read a 0-100 virality score as a verdict.
+ *
+ * The panel's job is deciding what to publish first, so the score needs a word
+ * next to it: a bare number invites comparison but not a decision.
+ */
+export const viralityTier = (score: number): ViralityTier => {
+  const clamped = Math.max(0, Math.min(100, Math.round(score || 0)));
+  const segments = Math.round((clamped / 100) * VIRALITY_SEGMENTS);
+  if (clamped >= 80) return { key: "strong", label: "Sangat kuat", segments };
+  if (clamped >= 60) return { key: "good", label: "Kuat", segments };
+  if (clamped >= 40) return { key: "fair", label: "Cukup", segments };
+  return { key: "weak", label: "Lemah", segments };
+};

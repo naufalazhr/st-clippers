@@ -13,6 +13,9 @@ export type Transition = "none" | "fade" | "fadeblack" | "fadewhite";
 export type SourceMode = "url" | "upload";
 
 export type ClipFile = {
+  /** 0-100 likelihood this clip travels, with the model's justification. */
+  virality_score?: number;
+  virality_reason?: string;
   name: string;
   url: string;
   size_bytes: number;
@@ -68,6 +71,7 @@ export type ClipJob = {
     caption_outline: number;
     caption_outline_color: string;
     caption_style?: CaptionStyle;
+  topic?: string;
   caption_box_opacity?: number | null;
     transition?: Transition;
     ai_enabled: boolean;
@@ -95,6 +99,7 @@ export type CreateClipJobInput = {
   caption_outline?: number;
   caption_outline_color?: string;
   caption_style?: CaptionStyle;
+  topic?: string;
   caption_box_opacity?: number | null;
   transition?: Transition;
   required_hashtags?: string[];

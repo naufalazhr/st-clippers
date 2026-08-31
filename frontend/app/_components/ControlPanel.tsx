@@ -70,6 +70,8 @@ export type ControlPanelProps = {
   url: string;
   name: string;
   onNameChange: (value: string) => void;
+  topic: string;
+  onTopicChange: (value: string) => void;
   watermarkType: WatermarkType;
   onWatermarkTypeChange: (value: WatermarkType) => void;
   watermarkText: string;
@@ -110,6 +112,8 @@ export function ControlPanel(props: ControlPanelProps) {
         url={props.url}
         name={props.name}
         onNameChange={props.onNameChange}
+        topic={props.topic}
+        onTopicChange={props.onTopicChange}
         onSourceModeChange={props.onSourceModeChange}
         onUploadFileChange={props.onUploadFileChange}
         onUrlChange={props.onUrlChange}

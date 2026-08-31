@@ -60,6 +60,8 @@ export function InspectorPanel(props: ControlPanelProps) {
             url={props.url}
             name={props.name}
             onNameChange={props.onNameChange}
+            topic={props.topic}
+            onTopicChange={props.onTopicChange}
             onSourceModeChange={props.onSourceModeChange}
             onUploadFileChange={props.onUploadFileChange}
             onUrlChange={props.onUrlChange}

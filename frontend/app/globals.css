@@ -2174,3 +2174,145 @@ a {
   margin: 0.25rem 0 1rem;
   font-size: 0.85rem;
 }
+
+/* ══ Results: a ranked verdict board ═══════════════════════════════════════
+   Clips arrive sorted by virality score, so the panel's job is deciding what
+   to publish first. Rank and score lead; the video stays the hero. */
+
+.resultsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.resultsHeader h2 {
+  margin: 0;
+}
+
+.resultsHeader-note {
+  margin: var(--space-xs) 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Tier accent drives the rank marker, meter and reason rule on each card. */
+.clipCard[data-tier="strong"] { --tier: var(--success); --tier-soft: var(--success-soft); }
+.clipCard[data-tier="good"]   { --tier: var(--info);    --tier-soft: var(--info-soft); }
+.clipCard[data-tier="fair"]   { --tier: var(--warning); --tier-soft: var(--warning-soft); }
+.clipCard[data-tier="weak"]   { --tier: var(--text-muted); --tier-soft: var(--surface); }
+
+.clipCard-media {
+  position: relative;
+}
+
+/* Rank is real information here: the list is genuinely ordered by score. */
+.clipRank {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: rgba(17, 17, 29, 0.82);
+  border: 1px solid var(--tier, var(--border-strong));
+  color: var(--tier, var(--text-primary));
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(6px);
+}
+
+/* The signature: a segmented signal meter, read at a glance across the grid. */
+.viralityMeter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) 18px 0;
+}
+
+.viralityMeter-track {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.viralityMeter-tick {
+  flex: 1;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--surface);
+  transition: background var(--transition-smooth, 160ms ease);
+}
+
+.viralityMeter-tick.is-lit {
+  background: var(--tier, var(--primary));
+}
+
+.viralityMeter-score {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tier, var(--text-primary));
+  line-height: 1;
+}
+
+.viralityMeter-verdict {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* The justification sits with the score it explains. */
+.viralityReason {
+  margin: 0 18px var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 2px solid var(--tier, var(--border-strong));
+  background: var(--tier-soft, var(--surface));
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.viralityReason-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.viralityReason p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* The clipInfo padding-top is now carried by the meter above it. */
+.clipCard .clipInfo {
+  padding-top: var(--space-md);
+}
+
+@media (max-width: 560px) {
+  .resultsHeader {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  .viralityMeter-verdict {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viralityMeter-tick {
+    transition: none;
+  }
+}

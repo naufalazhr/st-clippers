@@ -11,6 +11,8 @@ type SourceSectionProps = {
   url: string;
   name: string;
   onNameChange: (value: string) => void;
+  topic: string;
+  onTopicChange: (value: string) => void;
   onSourceModeChange: (mode: SourceMode) => void;
   onUploadFileChange: (file: File | null) => void;
   onUrlChange: (value: string) => void;
@@ -24,6 +26,8 @@ export function SourceSection({
   url,
   name,
   onNameChange,
+  topic,
+  onTopicChange,
   onSourceModeChange,
   onUploadFileChange,
   onUrlChange,
@@ -38,6 +42,21 @@ export function SourceSection({
           placeholder="Nama project (opsional)"
           aria-label="Nama project"
         />
+      </label>
+
+      <label className="field wide">
+        <span>Topik yang Disorot</span>
+        <input
+          value={topic}
+          onChange={(event) => onTopicChange(event.target.value)}
+          placeholder="Misal: cara menghubungkan bot ke Telegram"
+          maxLength={300}
+          aria-label="Topik yang disorot"
+        />
+        <small className="fieldHint">
+          Bagian video yang membahas topik ini akan diprioritaskan. Kosongkan
+          untuk memilih momen terkuat dari seluruh video.
+        </small>
       </label>
 
       <div className="segmentedField">

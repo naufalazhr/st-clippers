@@ -84,6 +84,7 @@ export default function HomePage() {
   const [captionFont, setCaptionFont] = useState<CaptionFont>(DEFAULT_CAPTION_FONT);
   const [captionOutline, setCaptionOutline] = useState(DEFAULT_CAPTION_OUTLINE);
   const [captionOutlineColor, setCaptionOutlineColor] = useState(DEFAULT_CAPTION_OUTLINE_COLOR);
+  const [topic, setTopic] = useState("");
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(DEFAULT_CAPTION_STYLE);
   // null = use the preset default (solid for boxed, translucent for highlight).
   const [captionBoxOpacity, setCaptionBoxOpacity] = useState<number | null>(null);
@@ -352,6 +353,7 @@ export default function HomePage() {
           caption_font: captionFont,
           caption_outline: captionOutline,
           caption_outline_color: captionOutlineColor,
+          topic: topic.trim(),
           caption_style: captionStyle,
           caption_box_opacity: captionBoxOpacity,
           transition,
@@ -508,6 +510,8 @@ export default function HomePage() {
                onUrlChange={setUrl}
                url={url}
                name={name}
+               topic={topic}
+               onTopicChange={setTopic}
                onNameChange={setName}
                watermarkType={watermarkType}
                onWatermarkTypeChange={setWatermarkType}
@@ -624,6 +628,8 @@ export default function HomePage() {
                  onUrlChange={setUrl}
                  url={url}
                  name={name}
+               topic={topic}
+               onTopicChange={setTopic}
                  onNameChange={setName}
                  watermarkType={watermarkType}
                  onWatermarkTypeChange={setWatermarkType}

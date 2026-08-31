@@ -2,7 +2,14 @@ import toast from "react-hot-toast";
 import { Clipboard, Download, Edit3, ExternalLink, Loader2, Scissors, Video } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getOutputUrl, getTimeline, recutClip } from "../../lib/apiClient";
-import { clipTitle, handleCopyTitle, handleDownload, pendingClipCount } from "../../lib/utils";
+import {
+  VIRALITY_SEGMENTS,
+  clipTitle,
+  handleCopyTitle,
+  handleDownload,
+  pendingClipCount,
+  viralityTier,
+} from "../../lib/utils";
 import type { ClipFile, ClipJob, ClipCandidate, TimelineData } from "../../types/clip.type";
 import { EditCaptionDialog } from "./EditCaptionDialog";
 import { ThumbnailPrompt } from "./ThumbnailPrompt";
@@ -77,13 +84,26 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
 
   const handleCloseCaptionDialog = useCallback(() => setEditCaptionClip(null), []);
 
+  // Rank comes from position in the list, which the backend already sorted by
+  // score. Only rank when the scores are real, so an older job without them
+  // does not get a meaningless leaderboard.
+  const ranked = clips.some((clip) => (clip.virality_score ?? 0) > 0);
+  const rankOf = (clip: ClipFile) => (ranked ? clips.indexOf(clip) + 1 : 0);
+
   return (
     <section className="results">
-      <div className="sectionHeader">
-        <h2>Klip Siap Digunakan</h2>
+      <div className="resultsHeader">
+        <div>
+          <h2>Klip Siap Digunakan</h2>
+          {clips.length > 1 && (
+            <p className="resultsHeader-note">
+              Diurutkan dari skor viral tertinggi. Mulai dari yang teratas.
+            </p>
+          )}
+        </div>
         <span className="sectionBadge">
           {pendingCount
-            ? `${clips.length} siap - ${pendingCount} diproses`
+            ? `${clips.length} siap · ${pendingCount} diproses`
             : `${clips.length} klip siap`}
         </span>
       </div>
@@ -99,11 +119,15 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
             const hasEditBtn = canEdit(clip.name);
 
             const isRerendering = idx === recutIndex;
+            const score = clip.virality_score ?? 0;
+            const tier = viralityTier(score);
+            const rank = rankOf(clip);
 
             return (
               <article
                 className={`clipCard${isRerendering ? " clipCard--rerendering" : ""}`}
                 key={clip.url}
+                data-tier={tier.key}
               >
                 {isRerendering && (
                   <div className="clipCard-rerenderOverlay">
@@ -111,12 +135,39 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
                     <span>Merender ulang...</span>
                   </div>
                 )}
-                <video
-                  controls
-                  preload="metadata"
-                  src={url}
-                  poster={clip.thumbnail_url ? getOutputUrl(clip.thumbnail_url) : undefined}
-                />
+                <div className="clipCard-media">
+                  <video
+                    controls
+                    preload="metadata"
+                    src={url}
+                    poster={clip.thumbnail_url ? getOutputUrl(clip.thumbnail_url) : undefined}
+                  />
+                  {rank > 0 && (
+                    <span className="clipRank" aria-label={`Peringkat ${rank}`}>
+                      {rank}
+                    </span>
+                  )}
+                </div>
+
+                {score > 0 && (
+                  <div className="viralityMeter">
+                    <div
+                      className="viralityMeter-track"
+                      role="img"
+                      aria-label={`Skor viral ${score} dari 100, ${tier.label}`}
+                    >
+                      {Array.from({ length: VIRALITY_SEGMENTS }, (_, i) => (
+                        <span
+                          key={i}
+                          className={`viralityMeter-tick${i < tier.segments ? " is-lit" : ""}`}
+                        />
+                      ))}
+                    </div>
+                    <span className="viralityMeter-score">{score}</span>
+                    <span className="viralityMeter-verdict">{tier.label}</span>
+                  </div>
+                )}
+
                 <div className="clipInfo">
                   <h3>{title}</h3>
                   <button
@@ -129,6 +180,14 @@ export function ResultsSection({ job, onJobRefresh }: ResultsSectionProps) {
                     Copy
                   </button>
                 </div>
+
+                {clip.virality_reason && (
+                  <div className="viralityReason">
+                    <span className="viralityReason-label">Kenapa bisa viral</span>
+                    <p>{clip.virality_reason}</p>
+                  </div>
+                )}
+
                 <div className="clipActions">
                   <a href={url} target="_blank" rel="noreferrer">
                     <ExternalLink size={16} />
