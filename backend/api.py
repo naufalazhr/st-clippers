@@ -83,6 +83,8 @@ class ClipJobRequest(BaseModel):
     caption_outline: float = Field(default=2.0, ge=0, le=8)
     caption_outline_color: str = "#000000"
     caption_style: Literal["classic", "bold", "boxed", "highlight", "shadow"] = "classic"
+    # What the user wants the clips to be about; steers the AI's picks.
+    topic: str = Field(default="", max_length=300)
     # Opacity of the box behind boxed/highlight captions. None = preset default.
     caption_box_opacity: int | None = Field(default=None, ge=0, le=100)
     transition: Literal["none", "fade", "fadeblack", "fadewhite"] = "none"
@@ -120,6 +122,9 @@ class ClipCandidate(BaseModel):
     title: str
     reason: str
     text: str
+    # Defaulted so candidates written by older builds still load.
+    virality_score: int = 0
+    virality_reason: str = ""
 
 
 class TranscriptSegmentOut(BaseModel):
@@ -183,6 +188,10 @@ class ClipFile(BaseModel):
     name: str
     url: str
     size_bytes: int
+    # The clip's own verdict, read from the JSON export_clip writes beside it,
+    # so results can be ranked without cross-referencing candidates.
+    virality_score: int = 0
+    virality_reason: str = ""
     thumbnail_url: str | None = None
     thumbnail_prompt: str | None = None
     social_caption: str | None = None
@@ -335,11 +344,30 @@ def clip_url(path: Path) -> str:
     return f"/outputs/{quote(relative)}?v={version}"
 
 
+def clip_verdict(path: Path) -> tuple[int, str]:
+    """Read the virality verdict export_clip saved next to the clip."""
+    sidecar = path.with_suffix(".json")
+    if not sidecar.is_file():
+        return 0, ""
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0, ""
+    if not isinstance(data, dict):
+        return 0, ""
+    score = data.get("virality_score") or data.get("score") or 0
+    reason = data.get("virality_reason") or data.get("reason") or ""
+    return (int(score) if isinstance(score, (int, float)) else 0), str(reason)
+
+
 def clip_file_from_path(path: Path) -> ClipFile:
     thumb_path = path.with_name(f"{path.stem}_thumb.jpg")
     prompt_path = path.with_name(f"{path.stem}_thumb.txt")
     caption_path = path.with_name(f"{path.stem}_caption.txt")
+    virality_score, virality_reason = clip_verdict(path)
     return ClipFile(
+        virality_score=virality_score,
+        virality_reason=virality_reason,
         name=path.name,
         url=clip_url(path),
         size_bytes=path.stat().st_size,
@@ -361,7 +389,9 @@ def discover_clips(started_at: float) -> list[ClipFile]:
         if path.stat().st_mtime + 1 < started_at:
             continue
         clips.append(clip_file_from_path(path))
-    clips.sort(key=lambda item: item.name)
+    # Best bet first: the whole point of the score is deciding what to post.
+    # Name is the tiebreaker so the order stays stable while clips stream in.
+    clips.sort(key=lambda item: (-item.virality_score, item.name))
     return clips
 
 
@@ -665,6 +695,8 @@ def build_clipper_command(request: ClipJobRequest) -> list[str]:
     command.extend(["--caption-outline", str(request.caption_outline)])
     command.extend(["--caption-outline-color", request.caption_outline_color])
     command.extend(["--caption-style", request.caption_style])
+    if request.topic.strip():
+        command.extend(["--topic", request.topic.strip()])
     if request.caption_box_opacity is not None:
         command.extend(["--caption-box-opacity", str(request.caption_box_opacity)])
     command.extend(["--transition", request.transition])

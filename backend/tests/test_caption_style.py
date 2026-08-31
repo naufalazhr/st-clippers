@@ -261,3 +261,14 @@ def test_opacity_is_ignored_by_non_box_presets():
         a = build_subtitle_style(CaptionStyle(style=preset, box_opacity=10))
         b = build_subtitle_style(CaptionStyle(style=preset, box_opacity=90))
         assert a == b, preset
+
+
+def test_fontsdir_escapes_an_apostrophe_in_the_path():
+    # A user folder like C:\Users\O'Brien would otherwise close the quoted
+    # filter option early and break the whole graph.
+    from pathlib import Path
+
+    from clipper import ffmpeg_filter_path
+
+    arg = ffmpeg_filter_path(Path(r"C:\Users\O'Brien\fonts"))
+    assert arg == r"'C\:/Users/O\'Brien/fonts'"

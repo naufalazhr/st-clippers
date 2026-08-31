@@ -55,6 +55,10 @@ class ClipCandidate:
     title: str
     reason: str
     text: str
+    # How likely this clip is to travel, 0-100, with the model's justification.
+    # Falls back to the heuristic score when the AI agent is off or fails.
+    virality_score: int = 0
+    virality_reason: str = ""
 
 
 HOOK_WORDS = {
@@ -1087,13 +1091,30 @@ AI_RESCORE_POOL_LIMIT = 40
 AI_SYSTEM_PROMPT = (
     "You are an expert short-form video editor for TikTok, Reels, and YouTube Shorts. "
     "You are given candidate transcript windows from a longer video. "
-    "Judge each candidate on how powerful it would be as a standalone vertical clip: "
+    "Judge each candidate on how likely it is to travel as a standalone vertical clip: "
     "strong hook, emotional or surprising payoff, self-contained meaning, and clear value. "
     "Return ONLY strict JSON, no markdown, no prose."
 )
 
 
-def ai_rescore_candidates(candidates: list[ClipCandidate], config: AIConfig) -> list[ClipCandidate]:
+def topic_instruction(topic: str) -> str:
+    """Extra prompt steering when the user named a topic to highlight."""
+    topic = (topic or "").strip()
+    if not topic:
+        return ""
+    return (
+        chr(10) + chr(10) + "The user wants clips about this topic: "
+        + repr(topic[:300])
+        + chr(10)
+        + "Rank candidates covering that topic far above ones that do not, and say "
+        "in the reason how the clip relates to it. If nothing covers it, score the "
+        "closest matches honestly rather than inventing a connection."
+    )
+
+
+def ai_rescore_candidates(
+    candidates: list[ClipCandidate], config: AIConfig, topic: str = ""
+) -> list[ClipCandidate]:
     if not config.enabled or not candidates:
         return candidates
     if not config.base_url or not config.model:
@@ -1113,12 +1134,15 @@ def ai_rescore_candidates(candidates: list[ClipCandidate], config: AIConfig) -> 
         for idx, candidate in enumerate(pool)
     ]
     user_prompt = (
-        "Score each candidate from 0-100 on standalone clip potential.\n"
+        "Score each candidate from 0-100 on how likely it is to go viral.\n"
         "Respond with JSON shaped exactly like:\n"
         '{"clips": [{"id": <int>, "score": <int 0-100>, '
         '"title": "<catchy hook title, max 8 words>", '
-        '"reason": "<short why this clip works>"}]}\n\n'
-        "Candidates:\n" + json.dumps(items, ensure_ascii=False)
+        '"reason": "<short why this clip works>", '
+        '"virality_reason": "<one sentence: why people would share this>"}]}'
+        + topic_instruction(topic)
+        + "\n\nCandidates:\n"
+        + json.dumps(items, ensure_ascii=False)
     )
 
     try:
@@ -1157,6 +1181,10 @@ def ai_rescore_candidates(candidates: list[ClipCandidate], config: AIConfig) -> 
         reason = entry.get("reason")
         if isinstance(reason, str) and reason.strip():
             candidate.reason = "AI: " + reason.strip()[:160]
+        candidate.virality_score = candidate.score
+        virality = entry.get("virality_reason") or entry.get("reason")
+        if isinstance(virality, str) and virality.strip():
+            candidate.virality_reason = virality.strip()[:240]
         applied += 1
 
     console.print(f"[green]AI agent rescored[/green] {applied} candidates.")
@@ -1299,7 +1327,10 @@ def ffmpeg_filter_path(path: Path) -> str:
     Filter options are colon-separated, so a Windows drive letter has to be
     escaped and the value quoted, or the graph fails to parse.
     """
-    text = str(path).replace("\\", "/").replace("'", "\'").replace(":", "\:")
+    # Each replacement must emit a real backslash: "\'" is just an apostrophe and
+    # "\:" only worked by accident (it is a deprecated invalid escape).
+    text = str(path).replace("\\", "/")
+    text = text.replace("'", "\\'").replace(":", "\\:")
     return f"'{text}'"
 
 
@@ -1925,6 +1956,11 @@ def parse_args() -> argparse.Namespace:
         help="Caption preset: classic, bold, boxed (opaque box), highlight (translucent box), shadow",
     )
     parser.add_argument(
+        "--topic",
+        default="",
+        help="Topic to highlight; steers which parts the AI picks for clips",
+    )
+    parser.add_argument(
         "--caption-box-opacity",
         type=int,
         default=None,
@@ -2016,12 +2052,17 @@ def main() -> int:
         model=args.ai_model,
         api_key=args.ai_api_key,
     )
-    pool = ai_rescore_candidates(pool, ai_config)
+    pool = ai_rescore_candidates(pool, ai_config, args.topic)
     candidates = select_candidates(pool, args.top)
     if not candidates:
         console.print("[red]No clip candidates found. Try lowering --min or increasing --max.[/red]")
         return 1
 
+    for item in candidates:
+        if not item.virality_score:
+            item.virality_score = item.score
+        if not item.virality_reason:
+            item.virality_reason = item.reason
     save_json(work_dir / f"candidates{cache_suffix}.json", [asdict(item) for item in candidates])
     print_candidates(candidates)
 
