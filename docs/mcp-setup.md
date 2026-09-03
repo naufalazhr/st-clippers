@@ -77,7 +77,30 @@ curl -s -X POST http://127.0.0.1:<PORT>/mcp \
 | `list_jobs` | "Kemarin aku proses video apa saja?" |
 | `get_job` | Status satu job, klip yang sudah jadi, dan cuplikan log. Bisa menunggu lewat `wait_seconds`. |
 | `list_clips` | Klip sebuah job, urut dari skor viral tertinggi, lengkap dengan **path file absolut** |
+| `get_style_options` | Semua pilihan tampilan beserta nilai yang valid dan default-nya |
 | `create_clip_job` | Membuat klip dari sebuah video. Butuh `url`; `topic` sangat memengaruhi bagian mana yang dipilih |
+| `restyle_clip` | Render ulang satu klip dengan gaya berbeda (style caption, font, ukuran, warna, framing, transisi, watermark) |
+
+### Yang bisa diatur agent
+
+Sama seperti kontrol di aplikasi: framing (`crop_mode`, `cam_corner`), caption
+(`caption_style`, `caption_font`, `caption_font_size`, `caption_position`,
+`caption_color`, `caption_outline`, `caption_outline_color`,
+`caption_box_opacity`, `burn_subtitles`), `transition`, watermark
+(`watermark_text`, posisi, opacity, skala, warna, font), dan saat pembuatan juga
+`top`, durasi, `language`, `analyze_seconds`, `required_hashtags`.
+
+Agent sebaiknya memanggil `get_style_options` dulu daripada menebak nama font
+atau mode framing — menebak baru ketahuan salah setelah render selesai.
+
+### Yang sengaja TIDAK bisa diubah agent
+
+- **Teks caption hasil transkripsi.** `restyle_clip` hanya mengubah tampilan;
+  isi kalimatnya tetap. Mengedit teks dilakukan sendiri di aplikasi lewat
+  dialog Edit Caption.
+- **API key AI.** Tidak pernah melewati MCP, baik masuk maupun keluar. Job yang
+  dibuat lewat agent memakai skor heuristik; skoring AI butuh key yang diatur
+  di aplikasi.
 
 `list_clips` dan `get_job` mengembalikan path file lokal supaya Hermes bisa
 mengirim videonya langsung ke Telegram (`sendVideo`) tanpa perlu mengunduh ulang.
@@ -96,6 +119,11 @@ Kalau pengguna minta membuat klip dengan Sultan Clip:
    prosesnya berjalan, lalu panggil get_job dengan wait_seconds. Jangan diam.
 3. Setelah selesai, panggil list_clips dan kirim file videonya langsung
    (sendVideo dengan path lokal), bukan link.
+3b. Kalau pengguna minta tampilannya diubah (misal "captionnya bikin kotak
+   hitam" atau "fontnya kegedean"), panggil get_style_options untuk memetakan
+   maunya ke nilai yang valid, lalu restyle_clip. Jangan menebak nama font.
+   Kalau yang diminta adalah mengubah kata-katanya, bilang bahwa itu diedit
+   sendiri di aplikasi.
 4. Sebutkan skor viral dan alasannya untuk tiap klip supaya pengguna tahu mana
    yang sebaiknya diunggah duluan.
 5. Sebelum menawarkan render ulang, panggil list_clips dulu — klip yang sudah

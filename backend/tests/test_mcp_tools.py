@@ -43,7 +43,10 @@ def jobs(monkeypatch):
 def test_tools_list_shape():
     reply = mcp_tools.dispatch("tools/list", {})
     tools = reply["ok"]["tools"]
-    assert {t["name"] for t in tools} == {"list_jobs", "get_job", "list_clips", "create_clip_job"}
+    names = {t["name"] for t in tools}
+    # Every handler is advertised and every advertised tool has a handler: a
+    # mismatch either hides a capability or offers one that cannot run.
+    assert names == set(mcp_tools.HANDLERS)
     for tool in tools:
         assert tool["description"].strip()
         # additionalProperties: false turns a typo into an error instead of a
