@@ -865,6 +865,38 @@ def model_status() -> dict[str, str | bool | float | None]:
     }
 
 
+class McpEnabledRequest(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/mcp/status")
+def mcp_status() -> dict:
+    """Live MCP status for the settings screen.
+
+    Address and token are per-install, so no written documentation of them can
+    be correct -- this endpoint is the source of truth the UI renders.
+    """
+    import mcp_server
+
+    return mcp_server.get_server(resolve_data_dir()).status.to_dict()
+
+
+@app.post("/api/mcp/enabled")
+def mcp_set_enabled(request: McpEnabledRequest) -> dict:
+    import mcp_server
+
+    server = mcp_server.get_server(resolve_data_dir())
+    return server.set_enabled(request.enabled).to_dict()
+
+
+@app.post("/api/mcp/regenerate-token")
+def mcp_regenerate_token() -> dict:
+    import mcp_server
+
+    server = mcp_server.get_server(resolve_data_dir())
+    return server.regenerate_token().to_dict()
+
+
 @app.get("/api/health")
 def health() -> dict:
     # app_version and crop_modes make a stale backend obvious: an orphaned old

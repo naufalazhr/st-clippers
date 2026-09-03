@@ -23,6 +23,8 @@ frontend/.env.*
 
 desktop/node_modules/
 desktop/src-tauri/target/
+# Isolated target dir used when building installers while the dev app runs
+desktop/src-tauri/target-release/
 desktop/src-tauri/gen/schemas/
 desktop/src-tauri/resources/sultanclip-backend/
 desktop/src-tauri/binaries/

@@ -79,6 +79,23 @@ def main() -> None:
     # nothing was listening yet, so anything trusting it raced a dead socket.
     app.router.on_startup.append(lambda: print("SULTANCLIP_READY", flush=True))
 
+    # Start the local MCP listener only if the user previously enabled it:
+    # opening a port is a decision, not a default.
+    def _start_mcp() -> None:
+        try:
+            import mcp_server
+            from api import resolve_data_dir
+
+            status = mcp_server.init(resolve_data_dir())
+            if status.running:
+                print(f"MCP listening on 127.0.0.1:{status.bound_port}", flush=True)
+            elif status.last_error:
+                print(f"MCP failed to start: {status.last_error}", flush=True)
+        except Exception as exc:  # never block the API from starting
+            print(f"MCP init error: {exc}", flush=True)
+
+    app.router.on_startup.append(_start_mcp)
+
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info")
 
 
