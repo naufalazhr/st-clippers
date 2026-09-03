@@ -1,0 +1,174 @@
+/* Agent access settings. Quiet by design: the values here are copied, not
+   admired, so legibility and a reliable copy button matter more than styling. */
+
+.mcpSettings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  max-width: 720px;
+}
+
+.mcpSettings-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.mcpSettings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+.mcpSettings-header h2 {
+  margin: 0;
+}
+
+.mcpSettings-sub {
+  margin: var(--space-xs) 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 46ch;
+}
+
+/* --- toggle --- */
+.mcpToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mcpToggle:disabled { opacity: 0.6; cursor: default; }
+.mcpToggle.is-on { color: var(--text-primary); border-color: var(--success); }
+
+.mcpToggle-track {
+  width: 34px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  position: relative;
+  transition: background 160ms ease;
+}
+
+.mcpToggle.is-on .mcpToggle-track { background: var(--success); }
+
+.mcpToggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 160ms ease;
+}
+
+.mcpToggle.is-on .mcpToggle-thumb { transform: translateX(14px); }
+
+/* --- status --- */
+.mcpStatusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.mcpDot { width: 8px; height: 8px; border-radius: 50%; }
+.mcpDot--on { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.mcpDot--off { background: var(--text-disabled); }
+
+/* --- notices --- */
+.mcpNotice {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.55;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.mcpNotice svg { flex-shrink: 0; margin-top: 2px; }
+.mcpNotice code { font-size: 12px; }
+.mcpNotice--warn { border-color: var(--warning); background: var(--warning-soft); }
+.mcpNotice--error { border-color: var(--danger); background: var(--danger-soft); }
+.mcpNotice--trust { border-style: dashed; }
+
+/* --- fields --- */
+.mcpField { display: flex; flex-direction: column; gap: var(--space-xs); }
+
+.mcpField > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.mcpField > small { font-size: 12px; color: var(--text-muted); }
+
+.mcpField-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+}
+
+.mcpField-row--block { align-items: flex-start; }
+
+.mcpField-row code,
+.mcpField-row pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.mcpToken { letter-spacing: 0.04em; }
+
+.mcpField-row button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.mcpField-row button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.mcpField-row button:disabled { opacity: 0.5; cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mcpToggle-track,
+  .mcpToggle-thumb,
+  .mcpField-row button { transition: none; }
+}

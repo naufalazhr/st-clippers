@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import "./DesktopShell.css";
 
-export type DesktopView = "clip" | "history" | "editor";
+export type DesktopView = "clip" | "history" | "editor" | "settings";
 
 export interface DesktopShellProps {
   view: DesktopView;

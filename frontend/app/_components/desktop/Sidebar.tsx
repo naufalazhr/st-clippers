@@ -1,6 +1,6 @@
 "use client";
 
-import { History, PanelLeft, Scissors, Sliders } from "lucide-react";
+import { History, PanelLeft, Scissors, Settings, Sliders } from "lucide-react";
 import type { DesktopView } from "./DesktopShell";
 import "./Sidebar.css";
 
@@ -15,6 +15,7 @@ const NAV_ITEMS: { id: DesktopView; label: string; icon: typeof Scissors }[] = [
   { id: "editor", label: "Editor", icon: Sliders },
   { id: "clip", label: "New Clip", icon: Scissors },
   { id: "history", label: "History", icon: History },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({ view, onViewChange, collapsed, onToggleCollapse }: SidebarProps) {

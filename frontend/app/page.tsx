@@ -48,6 +48,7 @@ import type {
 import { ControlPanel } from "./_components/ControlPanel";
 import { DeleteAllToast } from "./_components/DeleteAllToast";
 import { HistorySection } from "./_components/HistorySection";
+import { McpSettings } from "./_components/desktop/McpSettings";
 import { ResultsSection } from "./_components/ResultsSection";
 import { SiteFooter } from "./_components/SiteFooter";
 import { StatusPanel } from "./_components/StatusPanel";
@@ -531,6 +532,8 @@ export default function HomePage() {
                onWatermarkImageChange={setWatermarkImage}
                watermarkUploadedImageUrl={watermarkUploadedImageUrl}
              />
+          ) : view === "settings" ? (
+            <McpSettings />
           ) : view === "clip" ? (
             jobsLoading && !job ? (
               <div className="skeleton-cards">

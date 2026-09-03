@@ -151,3 +151,41 @@ export const recutClip = async (jobId: string, body: { index: number; start: num
   if (!response.ok) throw new Error(await response.text());
   return response.json() as Promise<RecutResponse>;
 };
+
+
+// --- MCP (local agent access) ----------------------------------------------
+
+export type McpStatus = {
+  enabled: boolean;
+  running: boolean;
+  preferred_port: number;
+  /** The port actually bound. Not the preferred one -- it moves when taken. */
+  bound_port: number | null;
+  /** True when the bound port differs from the one an agent config may hold. */
+  port_changed: boolean;
+  last_error: string | null;
+  token: string;
+  url: string | null;
+};
+
+export const getMcpStatus = async (): Promise<McpStatus> => {
+  const response = await fetch(`${API_BASE}/api/mcp/status`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Gagal memuat status MCP");
+  return (await response.json()) as McpStatus;
+};
+
+export const setMcpEnabled = async (enabled: boolean): Promise<McpStatus> => {
+  const response = await fetch(`${API_BASE}/api/mcp/enabled`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return (await response.json()) as McpStatus;
+};
+
+export const regenerateMcpToken = async (): Promise<McpStatus> => {
+  const response = await fetch(`${API_BASE}/api/mcp/regenerate-token`, { method: "POST" });
+  if (!response.ok) throw new Error(await response.text());
+  return (await response.json()) as McpStatus;
+};
