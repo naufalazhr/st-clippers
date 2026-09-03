@@ -7,6 +7,7 @@ use tauri::Manager;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 mod menu;
+mod tray;
 
 /// Windows CREATE_NO_WINDOW: the backend is a console app, so without this flag a
 /// console window pops up next to the app and closing it kills the backend.
@@ -166,7 +167,7 @@ fn spawn_backend(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn kill_backend(app: &tauri::AppHandle) {
+pub fn kill_backend(app: &tauri::AppHandle) {
     let state = app.state::<BackendProcess>();
     if let Ok(mut guard) = state.child.lock() {
         if let Some(ref mut child) = *guard {
@@ -187,11 +188,22 @@ pub fn run() {
             if let Err(e) = menu::build_menu(app) {
                 eprintln!("[tauri] Failed to build menu: {}", e);
             }
+            if let Err(e) = tray::setup(app.handle()) {
+                eprintln!("[tauri] Failed to build tray: {}", e);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                kill_backend(window.app_handle());
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // With MCP enabled the backend has to keep answering tool calls
+                // after the window is gone, so closing hides to the tray. With
+                // MCP off, closing quits exactly as it did before.
+                if window.label() == "main" && tray::mcp_enabled() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    kill_backend(window.app_handle());
+                }
             }
         })
         .build(tauri::generate_context!())
