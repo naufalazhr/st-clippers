@@ -145,6 +145,73 @@ def clamp_even(value: float, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, bounded))
 
 
+# A detection wider than this fraction of the frame is a backdrop, a set piece
+# or a logo rather than a face. Haar in particular latches onto high-contrast
+# studio graphics at that scale, and because detections were ranked by box size
+# a single 765px "face" outranked every real 270px face in the same frame.
+MAX_FACE_WIDTH_FRACTION = 0.34
+# Below this a "face" is noise, too small to be the subject of a vertical clip.
+MIN_FACE_WIDTH_FRACTION = 0.015
+
+# How far apart two detections can sit and still be the same person, as a
+# fraction of frame width. The split-screen face panel is a tight crop, so this
+# is narrower than the follow-person crop window.
+SPLIT_FACE_WINDOW_FRACTION = 0.22
+
+
+def plausible_face(box_size: float, frame_width: int) -> bool:
+    """Whether a detection is a believable face for a frame this wide."""
+    if frame_width <= 0:
+        return False
+    return (
+        MIN_FACE_WIDTH_FRACTION * frame_width
+        <= box_size
+        <= MAX_FACE_WIDTH_FRACTION * frame_width
+    )
+
+
+def consensus_focus(
+    picks: list[tuple[float, float]], window_fraction: float
+) -> float | None:
+    """Agree on one focus point from per-sample picks, as a fraction of width.
+
+    Averaging is the wrong statistic here. With two people on opposite sides of
+    a podcast set the samples are bimodal, and the mean lands between them --
+    which is precisely the empty backdrop the crop has to avoid. This instead
+    keeps the sample whose crop window covers the most weight, so the answer
+    always sits on a face that was really there, then refines within that
+    cluster.
+    """
+    if not picks:
+        return None
+    half = max(0.01, window_fraction / 2)
+
+    best_cluster: list[tuple[float, float]] = []
+    best_weight = -1.0
+    for centre, _ in picks:
+        cluster = [(x, w) for x, w in picks if abs(x - centre) <= half]
+        weight = sum(w for _, w in cluster)
+        # More covered weight wins; a tie goes to the tighter cluster so the
+        # focus does not drift towards the edge of a wide group.
+        if weight > best_weight or (
+            weight == best_weight and len(cluster) < len(best_cluster)
+        ):
+            best_cluster, best_weight = cluster, weight
+
+    total = sum(w for _, w in best_cluster)
+    if total <= 0:
+        return None
+    return sum(x * w for x, w in best_cluster) / total
+
+
+def crop_window_fraction(source_width: int, source_height: int) -> float:
+    """How much of the source width a 1080x1920 crop keeps, as a fraction."""
+    if source_width <= 0 or source_height <= 0:
+        return 1.0
+    scale = max(1080 / source_width, 1920 / source_height)
+    return min(1.0, 1080 / (scale * source_width))
+
+
 def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float, tuple[int, int]] | None:
     try:
         import cv2
@@ -192,10 +259,9 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
             5000,
         )
 
-    face_weighted_sum = 0.0
-    face_total_weight = 0.0
-    person_weighted_sum = 0.0
-    person_total_weight = 0.0
+    # (centre as a fraction of width, weight) for the best face in each sample.
+    face_picks: list[tuple[float, float]] = []
+    person_picks: list[tuple[float, float]] = []
 
     for offset in offsets:
         capture.set(cv2.CAP_PROP_POS_MSEC, (clip.start + offset) * 1000)
@@ -222,17 +288,23 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
                     x, _, w, h = face[:4]
                     confidence = float(face[-1])
                     center_x = (x + w / 2) / resize_scale
-                    face_detections.append((center_x, max(w, h) / resize_scale, confidence * 3.0))
+                    box = max(w, h) / resize_scale
+                    if plausible_face(box, width):
+                        face_detections.append((center_x, box, confidence * 3.0))
 
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(36, 36))
         for x, y, w, h in faces:
             center_x = (x + w / 2) / resize_scale
-            face_detections.append((center_x, max(w, h) / resize_scale, 2.0))
+            box = max(w, h) / resize_scale
+            if plausible_face(box, width):
+                face_detections.append((center_x, box, 2.0))
 
         profiles = profile_cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=(34, 34))
         for x, y, w, h in profiles:
             center_x = (x + w / 2) / resize_scale
-            face_detections.append((center_x, max(w, h) / resize_scale, 1.8))
+            box = max(w, h) / resize_scale
+            if plausible_face(box, width):
+                face_detections.append((center_x, box, 1.8))
 
         flipped_gray = cv2.flip(gray, 1)
         flipped_profiles = profile_cascade.detectMultiScale(
@@ -245,7 +317,9 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
         for x, y, w, h in flipped_profiles:
             original_x = resized_width - x - w
             center_x = (original_x + w / 2) / resize_scale
-            face_detections.append((center_x, max(w, h) / resize_scale, 1.8))
+            box = max(w, h) / resize_scale
+            if plausible_face(box, width):
+                face_detections.append((center_x, box, 1.8))
 
         people, weights = hog.detectMultiScale(
             resized,
@@ -260,22 +334,19 @@ def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float,
 
         if face_detections:
             center_x, box_width, confidence = max(face_detections, key=lambda item: item[1] * item[2])
-            weight = box_width * confidence
-            face_weighted_sum += (center_x / width) * weight
-            face_total_weight += weight
+            face_picks.append((center_x / width, box_width * confidence))
         elif person_detections:
             center_x, box_width, confidence = max(person_detections, key=lambda item: item[1] * item[2])
-            weight = box_width * confidence
-            person_weighted_sum += (center_x / width) * weight
-            person_total_weight += weight
+            person_picks.append((center_x / width, box_width * confidence))
 
     capture.release()
-    if face_total_weight > 0:
-        return face_weighted_sum / face_total_weight, (width, height)
-    if person_total_weight > 0:
-        return person_weighted_sum / person_total_weight, (width, height)
-    if face_total_weight <= 0 and person_total_weight <= 0:
-        return None
+
+    window = crop_window_fraction(width, height)
+    for picks in (face_picks, person_picks):
+        focus = consensus_focus(picks, window)
+        if focus is not None:
+            return focus, (width, height)
+    return None
 
 
 # Lanczos keeps fine detail (small text especially) that bicubic smears.
@@ -528,10 +599,8 @@ def detect_face_focus(video_path: Path, clip: ClipCandidate) -> tuple[float, flo
     step = duration / (sample_count + 1)
     offsets = [step * (index + 1) for index in range(sample_count)]
 
-    total_weight = 0.0
-    sum_x = 0.0
-    sum_y = 0.0
-    sum_size = 0.0
+    # Best face per sample: (centre_x, centre_y, box_size, weight) in source px.
+    picks: list[tuple[float, float, float, float]] = []
 
     for offset in offsets:
         capture.set(cv2.CAP_PROP_POS_MSEC, (clip.start + offset) * 1000)
@@ -557,26 +626,32 @@ def detect_face_focus(video_path: Path, clip: ClipCandidate) -> tuple[float, flo
                 for face in faces:
                     x, y, w, h = face[:4]
                     confidence = float(face[-1])
-                    detections.append(
-                        (
-                            (x + w / 2) / resize_scale,
-                            (y + h / 2) / resize_scale,
-                            max(w, h) / resize_scale,
-                            confidence * 3.0,
+                    box = max(w, h) / resize_scale
+                    if plausible_face(box, size[0]):
+                        detections.append(
+                            (
+                                (x + w / 2) / resize_scale,
+                                (y + h / 2) / resize_scale,
+                                box,
+                                confidence * 3.0,
+                            )
                         )
-                    )
 
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(36, 36))
         for x, y, w, h in faces:
-            detections.append(
-                ((x + w / 2) / resize_scale, (y + h / 2) / resize_scale, max(w, h) / resize_scale, 2.0)
-            )
+            box = max(w, h) / resize_scale
+            if plausible_face(box, size[0]):
+                detections.append(
+                    ((x + w / 2) / resize_scale, (y + h / 2) / resize_scale, box, 2.0)
+                )
 
         profiles = profile_cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=(34, 34))
         for x, y, w, h in profiles:
-            detections.append(
-                ((x + w / 2) / resize_scale, (y + h / 2) / resize_scale, max(w, h) / resize_scale, 1.8)
-            )
+            box = max(w, h) / resize_scale
+            if plausible_face(box, size[0]):
+                detections.append(
+                    ((x + w / 2) / resize_scale, (y + h / 2) / resize_scale, box, 1.8)
+                )
 
         flipped_gray = cv2.flip(gray, 1)
         flipped_profiles = profile_cascade.detectMultiScale(
@@ -587,27 +662,39 @@ def detect_face_focus(video_path: Path, clip: ClipCandidate) -> tuple[float, flo
         )
         for x, y, w, h in flipped_profiles:
             original_x = resized_width - x - w
-            detections.append(
-                (
-                    (original_x + w / 2) / resize_scale,
-                    (y + h / 2) / resize_scale,
-                    max(w, h) / resize_scale,
-                    1.8,
+            box = max(w, h) / resize_scale
+            if plausible_face(box, size[0]):
+                detections.append(
+                    (
+                        (original_x + w / 2) / resize_scale,
+                        (y + h / 2) / resize_scale,
+                        box,
+                        1.8,
+                    )
                 )
-            )
 
         # Keep only the most prominent face per sample so background faces do not drift the focus.
         if detections:
-            cx, cy, box_size, weight = max(detections, key=lambda item: item[2] * item[3])
-            sum_x += cx * weight
-            sum_y += cy * weight
-            sum_size += box_size * weight
-            total_weight += weight
+            picks.append(max(detections, key=lambda item: item[2] * item[3]))
 
     capture.release()
-    if total_weight <= 0:
+    if not picks:
         return None
-    return sum_x / total_weight, sum_y / total_weight, sum_size / total_weight
+
+    # Agree on which face to frame before averaging anything: with two people on
+    # opposite sides, averaging their positions frames the gap between them.
+    width = size[0]
+    focus_x = consensus_focus([(cx / width, weight) for cx, _, _, weight in picks],
+                              SPLIT_FACE_WINDOW_FRACTION)
+    if focus_x is None:
+        return None
+
+    half = max(0.01, SPLIT_FACE_WINDOW_FRACTION / 2)
+    chosen = [p for p in picks if abs(p[0] / width - focus_x) <= half] or picks
+    total = sum(weight for _, _, _, weight in chosen)
+    sum_y = sum(cy * weight for _, cy, _, weight in chosen)
+    sum_size = sum(box * weight for _, _, box, weight in chosen)
+    return focus_x * width, sum_y / total, sum_size / total
 
 
 def split_screen_filter(source_width: int, source_height: int, face: tuple[float, float, float] | None) -> str:
