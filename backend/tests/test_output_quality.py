@@ -43,7 +43,7 @@ def test_person_crop_scale_uses_lanczos(tmp_path):
     )
     video = tmp_path / "v.mp4"
     video.touch()
-    with patch("clipper.detect_person_focus_x", return_value=(0.5, (1920, 1080))):
+    with patch("clipper.detect_focus_track", return_value=([(0.0, 10.0, 0.5)], (1920, 1080))):
         vf = vertical_crop_filter(video, clip, "person")
     assert f"flags={SCALE_FLAGS}" in vf.split(",")[0]
 
@@ -198,7 +198,7 @@ def test_person_crop_adds_unsharp_when_upscaling(tmp_path):
     video = tmp_path / "v.mp4"
     video.touch()
     # 1920x1080 landscape covers 1080x1920 at a 1.78x upscale.
-    with patch("clipper.detect_person_focus_x", return_value=(0.5, (1920, 1080))):
+    with patch("clipper.detect_focus_track", return_value=([(0.0, 10.0, 0.5)], (1920, 1080))):
         vf = vertical_crop_filter(video, clip, "person")
     assert "unsharp" in vf.split(",")[1]
 
@@ -209,7 +209,7 @@ def test_person_crop_skips_unsharp_when_downscaling(tmp_path):
     clip = _person_clip()
     video = tmp_path / "v.mp4"
     video.touch()
-    with patch("clipper.detect_person_focus_x", return_value=(0.5, (3840, 2160))):
+    with patch("clipper.detect_focus_track", return_value=([(0.0, 10.0, 0.5)], (3840, 2160))):
         vf = vertical_crop_filter(video, clip, "person")
     assert "unsharp" not in vf
 

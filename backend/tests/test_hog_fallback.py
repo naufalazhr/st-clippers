@@ -53,7 +53,7 @@ def test_detect_person_returns_none_on_runtime_error(dummy_clip, tmp_path):
 def test_vertical_crop_filter_falls_back_to_center_when_detect_returns_none(dummy_clip, tmp_path):
     fake_video = tmp_path / "v.mp4"
     fake_video.touch()
-    with patch("clipper.detect_person_focus_x", return_value=None):
+    with patch("clipper.detect_focus_track", return_value=None):
         result = vertical_crop_filter(fake_video, dummy_clip, "person")
 
     assert result == CENTER_CROP_FILTER

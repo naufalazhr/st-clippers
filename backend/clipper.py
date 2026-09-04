@@ -212,6 +212,264 @@ def crop_window_fraction(source_width: int, source_height: int) -> float:
     return min(1.0, 1080 / (scale * source_width))
 
 
+def build_face_detectors():
+    """The detector stack, built once per clip.
+
+    YuNet is the reliable one; the Haar cascades add recall on profiles and
+    heads YuNet misses, at the cost of the occasional false positive on studio
+    graphics -- which is why every detection is size-checked before use.
+    """
+    import cv2
+
+    frozen_haar = frozen_base() / "cv2" / "data" / "haarcascades"
+    haar_dir = frozen_haar if frozen_haar.exists() else Path(cv2.data.haarcascades)
+    yunet = None
+    if YUNET_MODEL_PATH.exists() and hasattr(cv2, "FaceDetectorYN_create"):
+        yunet = cv2.FaceDetectorYN_create(str(YUNET_MODEL_PATH), "", (320, 320), 0.35, 0.3, 5000)
+    return (
+        yunet,
+        cv2.CascadeClassifier(str(haar_dir / "haarcascade_frontalface_default.xml")),
+        cv2.CascadeClassifier(str(haar_dir / "haarcascade_profileface.xml")),
+    )
+
+
+def faces_in_frame(frame, frame_width: int, detectors) -> list[tuple[float, float, float, float]]:
+    """Every believable face in one frame as (centre_x, centre_y, box, weight).
+
+    Coordinates are in source pixels. Implausibly sized detections are dropped
+    here so no caller has to remember to do it.
+    """
+    import cv2
+
+    yunet, face_cascade, profile_cascade = detectors
+    scale = min(1.0, 720 / max(frame.shape[:2]))
+    resized = (
+        cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        if scale < 1
+        else frame
+    )
+    resized_height, resized_width = resized.shape[:2]
+    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+
+    found: list[tuple[float, float, float, float]] = []
+
+    def keep(x, y, w, h, weight):
+        box = max(w, h) / scale
+        if plausible_face(box, frame_width):
+            found.append(((x + w / 2) / scale, (y + h / 2) / scale, box, weight))
+
+    if yunet is not None:
+        yunet.setInputSize((resized_width, resized_height))
+        _, faces = yunet.detect(resized)
+        if faces is not None:
+            for face in faces:
+                x, y, w, h = face[:4]
+                keep(x, y, w, h, float(face[-1]) * 3.0)
+
+    for x, y, w, h in face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(36, 36)):
+        keep(x, y, w, h, 2.0)
+
+    for x, y, w, h in profile_cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=4, minSize=(34, 34)):
+        keep(x, y, w, h, 1.8)
+
+    flipped = profile_cascade.detectMultiScale(
+        cv2.flip(gray, 1), scaleFactor=1.08, minNeighbors=4, minSize=(34, 34)
+    )
+    for x, y, w, h in flipped:
+        keep(resized_width - x - w, y, w, h, 1.8)
+
+    return found
+
+
+def best_face_in_frame(frame, frame_width: int, detectors):
+    """The most prominent believable face in a frame, or None."""
+    found = faces_in_frame(frame, frame_width, detectors)
+    if not found:
+        return None
+    centre_x, _, box, weight = max(found, key=lambda item: item[2] * item[3])
+    return centre_x, box, weight
+
+
+# How often to look for the subject while tracking a clip. Dense enough to
+# catch a camera change, sparse enough that detection stays a small part of the
+# render.
+FOCUS_SAMPLE_INTERVAL_SECONDS = 2.5
+
+# How strongly two frames must differ before the source counts as having cut to
+# another camera. Within a shot the score stays near zero and a hard cut lands
+# well above 0.3, so the exact value inside that gap does not matter much.
+SCENE_CUT_THRESHOLD = 0.30
+
+# Scene detection decodes the clip, so it is bounded: if it ever runs long the
+# render carries on treating the clip as one shot rather than stalling.
+SCENE_DETECT_TIMEOUT_SECONDS = 120
+
+# Frames inspected per shot. A shot is one camera on one subject, so a handful
+# of looks settles where they are; more only costs render time.
+MAX_SHOT_SAMPLES = 8
+
+# Shorter than this and a segment is a detection wobble rather than a shot;
+# merged into its neighbour so the crop does not twitch.
+MIN_SEGMENT_SECONDS = 1.2
+
+# Two shots whose focus differs by less than this are treated as one. Moving the
+# crop by a sliver is worse than not moving it: the viewer reads a small jump as
+# a glitch, whereas a large one reads as the cut it accompanies.
+MIN_FOCUS_SHIFT = 0.09
+
+
+def detect_scene_cuts(video_path: Path, start: float, duration: float) -> list[float]:
+    """Offsets within the clip where the source cuts to another camera.
+
+    Face positions alone cannot locate a cut. Sampling every few seconds puts
+    the boundary up to one interval late, so the previous camera's framing sits
+    over the opening of the new shot -- on a wide two-shot that means holding on
+    the empty backdrop between the two people. ffmpeg compares consecutive
+    frames and reports the real instant. It runs on a downscaled copy because
+    only the size of the change matters here, not its detail.
+    """
+    command = [
+        ffmpeg_path(),
+        "-hide_banner",
+        "-nostats",
+        "-ss",
+        str(start),
+        "-t",
+        str(duration),
+        "-i",
+        str(video_path),
+        "-filter:v",
+        f"scale=320:-2,select='gt(scene,{SCENE_CUT_THRESHOLD})',showinfo",
+        "-an",
+        "-f",
+        "null",
+        "-",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=SCENE_DETECT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        # No cut list simply means one shot, which is the old behaviour. Never
+        # worth failing a render over.
+        return []
+    found = (float(value) for value in re.findall(r"pts_time:([0-9.]+)", result.stderr))
+    return sorted({round(offset, 2) for offset in found if 0.0 < offset < duration})
+
+
+def shot_boundaries(cuts: list[float], duration: float) -> list[tuple[float, float]]:
+    """The spans between cuts, with flashes too short to be shots folded away."""
+    edges = [0.0, *cuts, duration]
+    shots: list[tuple[float, float]] = []
+    for begin, end in zip(edges, edges[1:]):
+        if end <= begin:
+            continue
+        if shots and (end - begin) < MIN_SEGMENT_SECONDS:
+            shots[-1] = (shots[-1][0], end)
+        else:
+            shots.append((begin, end))
+    if len(shots) > 1 and (shots[0][1] - shots[0][0]) < MIN_SEGMENT_SECONDS:
+        shots[1] = (0.0, shots[1][1])
+        shots.pop(0)
+    return shots or [(0.0, duration)]
+
+
+def merge_focus_segments(
+    segments: list[tuple[float, float, float]]
+) -> list[tuple[float, float, float]]:
+    """Fold together neighbours the crop would barely move between.
+
+    A small jump reads as a glitch, while a large one reads as the cut it
+    arrives with. So a move is only worth making when it is a real move.
+    """
+    merged: list[tuple[float, float, float]] = []
+    for start, end, focus in segments:
+        if merged and abs(focus - merged[-1][2]) < MIN_FOCUS_SHIFT:
+            merged[-1] = (merged[-1][0], end, merged[-1][2])
+        else:
+            merged.append((start, end, focus))
+    return merged
+
+
+def crop_x_expression(segments: list[tuple[float, float, float]], scaled_width: int) -> str:
+    """An ffmpeg crop-x expression that follows the shots.
+
+    A hard change at a boundary is correct: the source already cut there, so the
+    crop moving at the same instant is invisible.
+    """
+    def x_for(focus: float) -> int:
+        return clamp_even((focus * scaled_width) - 540, 0, scaled_width - 1080)
+
+    expression = str(x_for(segments[-1][2]))
+    for start, end, focus in reversed(segments[:-1]):
+        expression = f"if(lt(t,{end:.2f}),{x_for(focus)},{expression})"
+    return expression
+
+
+def detect_focus_track(
+    video_path: Path, clip: ClipCandidate
+) -> tuple[list[tuple[float, float, float]], tuple[int, int]] | None:
+    """Where the subject is over the length of a clip, split into shots."""
+    try:
+        import cv2
+    except Exception as exc:
+        console.print(f"[yellow]Person crop unavailable:[/yellow] {exc}")
+        return None
+
+    size = get_video_size(video_path)
+    if size is None:
+        return None
+    width, height = size
+
+    capture = cv2.VideoCapture(str(video_path.resolve()))
+    if not capture.isOpened():
+        return None
+
+    detectors = build_face_detectors()
+    duration = max(0.1, clip.end - clip.start)
+    window = crop_window_fraction(width, height)
+    shots = shot_boundaries(detect_scene_cuts(video_path, clip.start, duration), duration)
+
+    found: list[tuple[float, float, float | None]] = []
+    for shot_start, shot_end in shots:
+        span = shot_end - shot_start
+        count = max(1, min(MAX_SHOT_SAMPLES, round(span / FOCUS_SAMPLE_INTERVAL_SECONDS)))
+        step = span / count
+        picks: list[tuple[float, float]] = []
+        for index in range(count):
+            offset = shot_start + step * (index + 0.5)
+            capture.set(cv2.CAP_PROP_POS_MSEC, (clip.start + offset) * 1000)
+            ok, frame = capture.read()
+            if not ok:
+                continue
+            picks.extend(
+                (centre_x / width, box * weight)
+                for centre_x, _, box, weight in faces_in_frame(frame, width, detectors)
+            )
+        found.append((shot_start, shot_end, consensus_focus(picks, window)))
+
+    capture.release()
+    if not any(focus is not None for _, _, focus in found):
+        return None
+
+    # A shot with nobody in it -- a graphic, a cutaway, a crowd -- holds the
+    # framing it inherited instead of snapping somewhere arbitrary and back.
+    first_known = next(focus for _, _, focus in found if focus is not None)
+    segments: list[tuple[float, float, float]] = []
+    for start, end, focus in found:
+        if focus is None:
+            focus = segments[-1][2] if segments else first_known
+        segments.append((start, end, focus))
+
+    segments = merge_focus_segments(segments)
+    segments[-1] = (segments[-1][0], duration, segments[-1][2])
+    return segments, (width, height)
+
+
 def detect_person_focus_x(video_path: Path, clip: ClipCandidate) -> tuple[float, tuple[int, int]] | None:
     try:
         import cv2
@@ -382,22 +640,39 @@ def vertical_crop_filter(video_path: Path, clip: ClipCandidate, crop_mode: CropM
     if crop_mode == "center":
         return center_crop_filter(video_path)
 
-    focus = detect_person_focus_x(video_path, clip)
-    if focus is None:
+    tracked = detect_focus_track(video_path, clip)
+    if tracked is None:
         console.print(f"[yellow]No person detected for clip {clip.index}; using center crop.[/yellow]")
         return center_crop_filter(video_path)
 
-    focus_x, (source_width, source_height) = focus
+    segments, (source_width, source_height) = tracked
     scale = max(1080 / source_width, 1920 / source_height)
     scaled_width = make_even(source_width * scale, 1080)
     scaled_height = make_even(source_height * scale, 1920)
-    crop_x = clamp_even((focus_x * scaled_width) - 540, 0, scaled_width - 1080)
     crop_y = clamp_even((scaled_height - 1920) / 2, 0, scaled_height - 1920)
-    console.print(f"[green]Person crop[/green] clip {clip.index}: focus x={focus_x:.2f}, crop x={crop_x}")
     sharpen = UPSCALE_SHARPEN if scale > 1.0 else ""
+
+    if len(segments) == 1:
+        focus_x = segments[0][2]
+        crop_x = clamp_even((focus_x * scaled_width) - 540, 0, scaled_width - 1080)
+        console.print(
+            f"[green]Person crop[/green] clip {clip.index}: focus x={focus_x:.2f}, crop x={crop_x}"
+        )
+        position = str(crop_x)
+    else:
+        # The source cuts between cameras, and the speaker sits somewhere
+        # different in each one. A single crop position is wrong for whichever
+        # shots it was not chosen for, so the window moves at the same instants
+        # the source does -- which makes the change invisible.
+        position = crop_x_expression(segments, scaled_width)
+        summary = ", ".join(f"{a:.0f}-{b:.0f}s@{f:.2f}" for a, b, f in segments)
+        console.print(
+            f"[green]Person crop[/green] clip {clip.index}: {len(segments)} shots ({summary})"
+        )
+
     return (
         f"scale={scaled_width}:{scaled_height}:flags={SCALE_FLAGS}{sharpen},"
-        f"crop=1080:1920:{crop_x}:{crop_y},setsar=1"
+        f"crop=1080:1920:'{position}':{crop_y},setsar=1"
     )
 
 
